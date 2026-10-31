@@ -153,13 +153,17 @@ async def websocket_training(websocket: WebSocket, session_id: str):
     await websocket.accept()
     await session_manager.register_websocket(session_id, websocket)
 
+    curr_st = session.env.current_state
+    init_mask = curr_st[2] if len(curr_st) > 2 else 0
     await websocket.send_json({
         "type": "init",
         "session_id": session_id,
         "status": session.status,
         "current_episode": session.current_episode,
         "total_episodes": session.config.episodes,
-        "agent_position": list(session.env.current_state),
+        "agent_position": [curr_st[0], curr_st[1]],
+        "key_mask": init_mask,
+        "has_key": bool(init_mask & 1),
         "epsilon": session.agent.epsilon,
         "q_table": session.agent.get_q_table_serializable(),
         "best_actions": session.agent.get_best_actions(),
@@ -184,7 +188,9 @@ async def websocket_training(websocket: WebSocket, session_id: str):
                     session_manager.reset_training(session_id)
                     await websocket.send_json({
                         "type": "reset_ack",
-                        "agent_position": list(session.env.start),
+                        "agent_position": [session.env.start[0], session.env.start[1]],
+                        "key_mask": 0,
+                        "has_key": False,
                         "q_table": session.agent.get_q_table_serializable(),
                         "best_actions": session.agent.get_best_actions()
                     })

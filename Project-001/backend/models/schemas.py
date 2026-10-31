@@ -13,6 +13,9 @@ class EnvironmentConfig(BaseModel):
     mud: List[List[int]] = Field(default_factory=list)
     ice: List[List[int]] = Field(default_factory=list)
     portals: List[List[int]] = Field(default_factory=list)  # [[r1, c1, r2, c2], ...]
+    doors: List[List[int]] = Field(default_factory=list)    # [[door_r, door_c, key_r, key_c], ...]
+    key_reward: float = 10.0
+    door_penalty: float = -5.0
     goal_reward: float = 100.0
     step_penalty: float = -1.0
     wall_penalty: float = -5.0

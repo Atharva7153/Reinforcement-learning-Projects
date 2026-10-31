@@ -18,6 +18,9 @@ import {
   playMudSound,
   playIceSound,
   playClickSound,
+  playKeySound,
+  playDoorOpenSound,
+  playDoorLockedSound,
 } from './utils/sound';
 import {
   createEnvironment,
@@ -33,6 +36,9 @@ const DEFAULT_CONFIG = {
   mud: [[2, 2]],
   ice: [[0, 2]],
   portals: [],
+  doors: [],
+  key_reward: 10,
+  door_penalty: -5,
   goal_reward: 100, step_penalty: -1, wall_penalty: -5,
   cliff_penalty: -50, mud_penalty: -5, slippery_prob: 0.3,
   alpha: 0.1, gamma: 0.9,
@@ -58,12 +64,18 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [activeTool, setActiveTool] = useState('wall');
   const [pendingPortalEntry, setPendingPortalEntry] = useState(null);
+  const [pendingDoor, setPendingDoor] = useState(null);
+  const [currentKeyMask, setCurrentKeyMask] = useState(0);
+  const [policyKeyView, setPolicyKeyView] = useState(0);
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
 
   const handleSelectTool = (tool) => {
     setActiveTool(tool);
     if (tool !== 'portal') {
       setPendingPortalEntry(null);
+    }
+    if (tool !== 'door') {
+      setPendingDoor(null);
     }
   };
   const [showQValues, setShowQValues] = useState(true);
@@ -79,6 +91,7 @@ export default function App() {
   // Replay state
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [replayPath, setReplayPath] = useState([]);
+  const [replayTrajectory, setReplayTrajectory] = useState([]);
   const [replayStepIndex, setReplayStepIndex] = useState(0);
   const [selectedReplayEpisode, setSelectedReplayEpisode] = useState(null);
   const [isReplayPlaying, setIsReplayPlaying] = useState(false);
@@ -91,6 +104,14 @@ export default function App() {
     if (!isSoundEnabled()) return;
     if (config.goal[0] === r && config.goal[1] === c) {
       playGoalSound();
+      return;
+    }
+    if ((config.doors || []).some(([dr, dc, kr, kc]) => kr === r && kc === c)) {
+      playKeySound();
+      return;
+    }
+    if ((config.doors || []).some(([dr, dc, kr, kc]) => dr === r && dc === c)) {
+      playDoorOpenSound();
       return;
     }
     if ((config.cliffs || []).some(([cr, cc]) => cr === r && cc === c)) {
@@ -121,6 +142,7 @@ export default function App() {
       case 'init':
         setTrainingStatus(msg.status || 'idle');
         setEpsilon(msg.epsilon ?? DEFAULT_CONFIG.epsilon);
+        if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
         if (msg.state_values) setStateValues(msg.state_values);
@@ -130,14 +152,16 @@ export default function App() {
         setCurrentEpisode(msg.episode);
         setCurrentStep(0);
         setEpsilon(msg.epsilon);
+        if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
         break;
       case 'step':
         setCurrentStep(msg.step);
         setLastReward(msg.reward);
         setEpsilon(msg.epsilon);
         setAgentPosition(msg.agent_position);
+        if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
         if (delayMs >= 20) {
-          playStepSound(0.12);
+          playTileSound(msg.agent_position[0], msg.agent_position[1]);
         }
         break;
       case 'episode_end':
@@ -178,6 +202,8 @@ export default function App() {
         setTrainingStatus('idle');
         setCurrentEpisode(0);
         setCurrentStep(0);
+        setCurrentKeyMask(0);
+        setPolicyKeyView(0);
         setHistory([]);
         setIsReplayMode(false);
         setIsReplayPlaying(false);
@@ -186,10 +212,16 @@ export default function App() {
         setIsPolicyRunning(true);
         setIsReplayMode(false);
         setAgentPosition(msg.start);
+        setCurrentKeyMask(0);
+        setPolicyKeyView(0);
         playStepSound(0.2);
         break;
       case 'policy_demo_step':
         setAgentPosition(msg.agent_position);
+        if (msg.key_mask !== undefined) {
+          setCurrentKeyMask(msg.key_mask);
+          if (msg.has_key) setPolicyKeyView(1);
+        }
         playTileSound(msg.agent_position[0], msg.agent_position[1]);
         break;
       case 'policy_demo_finished':
@@ -308,10 +340,12 @@ export default function App() {
       mud: filterOut(config.mud || []),
       ice: filterOut(config.ice || []),
       portals: (config.portals || []).filter(([r1, c1, r2, c2]) => !(r1 === r && c1 === c) && !(r2 === r && c2 === c)),
+      doors: (config.doors || []).filter(([dr, dc, kr, kc]) => !(dr === r && dc === c) && !(kr === r && kc === c)),
     };
 
     if (activeTool === 'agent') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if (config.goal[0] === r && config.goal[1] === c) return;
       const nc = { ...cleanConfig, start: [r, c] };
       setConfig(nc);
@@ -319,12 +353,14 @@ export default function App() {
       initSession(nc);
     } else if (activeTool === 'goal') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if (config.start[0] === r && config.start[1] === c) return;
       const nc = { ...cleanConfig, goal: [r, c] };
       setConfig(nc);
       initSession(nc);
     } else if (activeTool === 'wall') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
       const exists = isMatch(config.obstacles || []);
       const updated = exists ? filterOut(config.obstacles) : [...filterOut(config.obstacles), [r, c]];
@@ -333,6 +369,7 @@ export default function App() {
       initSession(nc);
     } else if (activeTool === 'cliff') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
       const exists = isMatch(config.cliffs || []);
       const updated = exists ? filterOut(config.cliffs) : [...filterOut(config.cliffs), [r, c]];
@@ -341,6 +378,7 @@ export default function App() {
       initSession(nc);
     } else if (activeTool === 'mud') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
       const exists = isMatch(config.mud || []);
       const updated = exists ? filterOut(config.mud) : [...filterOut(config.mud), [r, c]];
@@ -349,13 +387,71 @@ export default function App() {
       initSession(nc);
     } else if (activeTool === 'ice') {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
       const exists = isMatch(config.ice || []);
       const updated = exists ? filterOut(config.ice) : [...filterOut(config.ice), [r, c]];
       const nc = { ...cleanConfig, ice: updated };
       setConfig(nc);
       initSession(nc);
+    } else if (activeTool === 'door') {
+      setPendingPortalEntry(null);
+      if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+
+      if (!pendingDoor) {
+        // --- CLICK 1: DROP DOOR ---
+        const existingDoorIdx = (config.doors || []).findIndex(
+          ([dr, dc, kr, kc]) => (dr === r && dc === c) || (kr === r && kc === c)
+        );
+
+        if (existingDoorIdx !== -1) {
+          const updatedDoors = (config.doors || []).filter((_, idx) => idx !== existingDoorIdx);
+          const nc = { ...config, doors: updatedDoors };
+          setConfig(nc);
+          initSession(nc);
+          return;
+        }
+
+        setPendingDoor([r, c]);
+        const nc = {
+          ...cleanConfig,
+          doors: config.doors || [],
+        };
+        setConfig(nc);
+      } else {
+        // --- CLICK 2: DROP KEY ---
+        const [doorR, doorC] = pendingDoor;
+
+        if (doorR === r && doorC === c) {
+          setPendingDoor(null);
+          return;
+        }
+
+        const cleanDoors = (config.doors || []).filter(
+          ([dr, dc, kr, kc]) =>
+            !(dr === doorR && dc === doorC) &&
+            !(kr === doorR && kc === doorC) &&
+            !(dr === r && dc === c) &&
+            !(kr === r && kc === c)
+        );
+
+        const newDoors = [...cleanDoors, [doorR, doorC, r, c]];
+        const nc = {
+          ...config,
+          obstacles: (config.obstacles || []).filter(([or, oc]) => !(or === doorR && oc === doorC) && !(or === r && oc === c)),
+          cliffs: (config.cliffs || []).filter(([cr, cc]) => !(cr === doorR && cc === doorC) && !(cr === r && cc === c)),
+          mud: (config.mud || []).filter(([mr, mc]) => !(mr === doorR && mc === doorC) && !(mr === r && mc === c)),
+          ice: (config.ice || []).filter(([ir, ic]) => !(ir === doorR && ic === doorC) && !(ir === r && ic === c)),
+          portals: (config.portals || []).filter(([pr1, pc1, pr2, pc2]) => !(pr1 === doorR && pc1 === doorC) && !(pr2 === doorR && pc2 === doorC) && !(pr1 === r && pc1 === c) && !(pr2 === r && pc2 === c)),
+          doors: newDoors,
+        };
+
+        setPendingDoor(null);
+        setConfig(nc);
+        initSession(nc);
+      }
     } else if (activeTool === 'portal') {
+      setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
 
       if (!pendingPortalEntry) {
@@ -412,6 +508,9 @@ export default function App() {
     } else if (activeTool === 'erase') {
       if (pendingPortalEntry && pendingPortalEntry[0] === r && pendingPortalEntry[1] === c) {
         setPendingPortalEntry(null);
+      }
+      if (pendingDoor && pendingDoor[0] === r && pendingDoor[1] === c) {
+        setPendingDoor(null);
       }
       setConfig(cleanConfig);
       initSession(cleanConfig);
@@ -536,6 +635,19 @@ export default function App() {
         cliffs: [], mud: [], ice: [], portals: [],
         episodes: 300, max_steps: 50,
       };
+    } else if (type === 'doorKey') {
+      // 6x6 Door & Key MDP: Goal behind wall, Door at [3, 3], Key at [4, 0]
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 6, cols: 6,
+        start: [0, 0], goal: [5, 5],
+        obstacles: [[0, 3], [1, 3], [2, 3], [4, 3], [5, 3]],
+        doors: [[3, 3, 4, 0]],
+        cliffs: [[3, 1], [3, 2]],
+        mud: [[1, 4]],
+        ice: [], portals: [],
+        episodes: 800, max_steps: 120, delay_ms: 25,
+      };
     } else if (type === 'cliff') {
       // Sutton & Barto Classic Cliff Walking
       preset = {
@@ -543,6 +655,7 @@ export default function App() {
         rows: 6, cols: 6,
         start: [5, 0], goal: [5, 5],
         obstacles: [],
+        doors: [],
         cliffs: [[5, 1], [5, 2], [5, 3], [5, 4]],
         mud: [[3, 2], [3, 3]],
         ice: [], portals: [],
@@ -555,6 +668,7 @@ export default function App() {
         rows: 8, cols: 8,
         start: [0, 0], goal: [7, 7],
         obstacles: [[2, 2], [2, 3], [2, 4], [5, 4], [5, 5]],
+        doors: [],
         cliffs: [[6, 1], [6, 2], [6, 3]],
         mud: [[3, 5], [4, 5], [4, 6]],
         ice: [[1, 4], [1, 5], [1, 6]],
@@ -571,6 +685,7 @@ export default function App() {
         rows: 12, cols: 12,
         start: [0, 0], goal: [11, 11],
         obstacles: walls,
+        doors: [],
         cliffs: [[4, 4], [4, 5], [8, 8]],
         mud: [[1, 8], [2, 8]],
         ice: [[5, 2], [5, 3], [6, 2]],
@@ -590,6 +705,7 @@ export default function App() {
         rows: 20, cols: 20,
         start: [0, 0], goal: [19, 19],
         obstacles: obs,
+        doors: [],
         cliffs: [[10, 5], [10, 6], [10, 7], [10, 8]],
         mud: [[15, 10], [15, 11], [16, 10], [16, 11]],
         ice: [[4, 12], [4, 13], [5, 12], [5, 13]],
@@ -600,6 +716,9 @@ export default function App() {
 
     if (preset) {
       setPendingPortalEntry(null);
+      setPendingDoor(null);
+      setCurrentKeyMask(0);
+      setPolicyKeyView(0);
       setConfig(preset);
       initSession(preset);
     }
@@ -609,7 +728,10 @@ export default function App() {
     setIsReplayMode(true);
     setIsReplayPlaying(false);
     setReplayPath(path || []);
+    setReplayTrajectory(trajectory || []);
     setReplayStepIndex(0);
+    setCurrentKeyMask(0);
+    setPolicyKeyView(0);
     if (epNumber) setSelectedReplayEpisode(epNumber);
     if (path?.length > 0) setAgentPosition(path[0]);
   };
@@ -618,7 +740,10 @@ export default function App() {
     setIsReplayMode(false);
     setIsReplayPlaying(false);
     setReplayPath([]);
+    setReplayTrajectory([]);
     setReplayStepIndex(0);
+    setCurrentKeyMask(0);
+    setPolicyKeyView(0);
     setSelectedReplayEpisode(null);
     setAgentPosition(config.start);
   };
@@ -629,13 +754,21 @@ export default function App() {
       if (replayPath?.[next]) {
         const [r, c] = replayPath[next];
         setAgentPosition([r, c]);
+        if (next === 0) {
+          setCurrentKeyMask(0);
+          setPolicyKeyView(0);
+        } else if (replayTrajectory?.[next - 1]?.next_key_mask !== undefined) {
+          const km = replayTrajectory[next - 1].next_key_mask;
+          setCurrentKeyMask(km);
+          setPolicyKeyView(km > 0 ? 1 : 0);
+        }
         if (next > 0 && next !== prev) {
           playTileSound(r, c);
         }
       }
       return next;
     });
-  }, [replayPath, playTileSound]);
+  }, [replayPath, replayTrajectory, playTileSound]);
 
   const handleToggleReplayPlay = useCallback((withScrollDelay = false) => {
     if (isReplayPlaying) {
@@ -871,6 +1004,11 @@ export default function App() {
                 ice={config.ice || []}
                 portals={config.portals || []}
                 pendingPortalEntry={pendingPortalEntry}
+                doors={config.doors || []}
+                pendingDoor={pendingDoor}
+                currentKeyMask={currentKeyMask}
+                policyKeyView={policyKeyView}
+                onTogglePolicyKeyView={setPolicyKeyView}
                 agentPosition={agentPosition}
                 qTable={qTable}
                 bestActions={bestActions}
@@ -930,6 +1068,7 @@ export default function App() {
             activeTool={activeTool}
             setActiveTool={handleSelectTool}
             pendingPortalEntry={pendingPortalEntry}
+            pendingDoor={pendingDoor}
             onStart={handleStart}
             onPause={handlePause}
             onResume={handleResume}
@@ -960,6 +1099,7 @@ export default function App() {
             mud={config.mud || []}
             ice={config.ice || []}
             portals={config.portals || []}
+            doors={config.doors || []}
             stateValues={stateValues}
             visitCounts={visitCounts}
           />

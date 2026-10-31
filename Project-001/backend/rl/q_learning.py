@@ -1,5 +1,5 @@
 import random
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
 from models.schemas import EnvironmentConfig
 from rl.environment import ACTIONS
 
@@ -14,14 +14,26 @@ class QLearningAgent:
         self.epsilon_min = config.epsilon_min
         self.actions = ACTIONS
 
-        # Dynamic Q-Table initialization
-        self.Q: Dict[Tuple[int, int], Dict[str, float]] = {
-            (r, c): {action: 0.0 for action in self.actions}
-            for r in range(self.rows)
-            for c in range(self.cols)
-        }
+        self.doors = [d for d in (config.doors or []) if len(d) >= 4]
+        self.num_doors = len(self.doors)
 
-    def choose_action(self, state: Tuple[int, int], greedy: bool = False) -> str:
+        # Dynamic Q-Table initialization with augmented state space if doors exist
+        if self.num_doors > 0:
+            max_mask = 1 << self.num_doors
+            self.Q: Dict[Tuple, Dict[str, float]] = {
+                (r, c, mask): {action: 0.0 for action in self.actions}
+                for r in range(self.rows)
+                for c in range(self.cols)
+                for mask in range(max_mask)
+            }
+        else:
+            self.Q: Dict[Tuple, Dict[str, float]] = {
+                (r, c): {action: 0.0 for action in self.actions}
+                for r in range(self.rows)
+                for c in range(self.cols)
+            }
+
+    def choose_action(self, state: Tuple, greedy: bool = False) -> str:
         if not greedy and random.random() < self.epsilon:
             return random.choice(self.actions)
 
@@ -33,19 +45,22 @@ class QLearningAgent:
 
     def update(
         self,
-        state: Tuple[int, int],
+        state: Tuple,
         action: str,
         reward: float,
-        next_state: Tuple[int, int],
+        next_state: Tuple,
         done: bool
     ) -> Tuple[float, float]:
         """Returns (new_q_value, td_error)"""
         if done:
             best_next = 0.0
         else:
-            best_next = max(self.Q[next_state].values())
+            next_q = self.Q.get(next_state, {a: 0.0 for a in self.actions})
+            best_next = max(next_q.values())
 
         target = reward + (self.gamma * best_next)
+        if state not in self.Q:
+            self.Q[state] = {a: 0.0 for a in self.actions}
         old_val = self.Q[state][action]
         td_error = abs(target - old_val)
         new_val = old_val + (self.alpha * (target - old_val))
@@ -57,25 +72,53 @@ class QLearningAgent:
         return self.epsilon
 
     def get_q_table_serializable(self) -> Dict[str, Dict[str, float]]:
-        return {
-            f"{r},{c}": {a: round(q, 3) for a, q in actions_q.items()}
-            for (r, c), actions_q in self.Q.items()
-        }
+        result = {}
+        for st, actions_q in self.Q.items():
+            if len(st) >= 3:
+                key = f"{st[0]},{st[1]},{st[2]}"
+            else:
+                key = f"{st[0]},{st[1]}"
+            result[key] = {a: round(q, 3) for a, q in actions_q.items()}
+            
+            # Fallback alias for base (r, c) when mask=0
+            if len(st) >= 3 and st[2] == 0:
+                base_key = f"{st[0]},{st[1]}"
+                if base_key not in result:
+                    result[base_key] = result[key]
+        return result
 
     def get_best_actions(self) -> Dict[str, Optional[str]]:
         result = {}
-        for (r, c), actions_q in self.Q.items():
-            max_q = max(actions_q.values())
-            # If all are zero, no preferred action yet
+        for st, actions_q in self.Q.items():
+            if len(st) >= 3:
+                key = f"{st[0]},{st[1]},{st[2]}"
+            else:
+                key = f"{st[0]},{st[1]}"
+
             if all(abs(v) < 1e-6 for v in actions_q.values()):
-                result[f"{r},{c}"] = None
+                best = None
             else:
                 best = max(actions_q, key=actions_q.get)
-                result[f"{r},{c}"] = best
+            result[key] = best
+
+            if len(st) >= 3 and st[2] == 0:
+                base_key = f"{st[0]},{st[1]}"
+                if base_key not in result:
+                    result[base_key] = best
         return result
 
     def get_state_values(self) -> Dict[str, float]:
-        return {
-            f"{r},{c}": round(max(actions_q.values()), 3)
-            for (r, c), actions_q in self.Q.items()
-        }
+        result = {}
+        for st, actions_q in self.Q.items():
+            if len(st) >= 3:
+                key = f"{st[0]},{st[1]},{st[2]}"
+            else:
+                key = f"{st[0]},{st[1]}"
+            val = round(max(actions_q.values()), 3)
+            result[key] = val
+
+            if len(st) >= 3 and st[2] == 0:
+                base_key = f"{st[0]},{st[1]}"
+                if base_key not in result:
+                    result[base_key] = val
+        return result

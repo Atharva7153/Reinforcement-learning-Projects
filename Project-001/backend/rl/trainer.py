@@ -91,11 +91,14 @@ class TrainingSession:
                 self.visit_counts[st_key] = self.visit_counts.get(st_key, 0) + 1
 
                 # Send episode start
+                curr_mask = state[2] if len(state) > 2 else 0
                 await broadcast_fn({
                     "type": "episode_start",
                     "episode": self.current_episode,
                     "total_episodes": self.config.episodes,
-                    "state": list(state),
+                    "state": [state[0], state[1]],
+                    "key_mask": curr_mask,
+                    "has_key": bool(curr_mask & 1),
                     "epsilon": self.agent.epsilon
                 })
 
@@ -122,12 +125,17 @@ class TrainingSession:
                     self.last_reward = reward
                     self.cumulative_reward += reward
 
+                    step_curr_mask = state[2] if len(state) > 2 else 0
+                    step_next_mask = next_state[2] if len(next_state) > 2 else 0
+
                     trajectory.append({
                         "step": step_count,
-                        "state": list(state),
+                        "state": [state[0], state[1]],
+                        "key_mask": step_curr_mask,
                         "action": action,
                         "reward": reward,
-                        "next_state": list(next_state),
+                        "next_state": [next_state[0], next_state[1]],
+                        "next_key_mask": step_next_mask,
                         "done": done
                     })
 
@@ -137,14 +145,16 @@ class TrainingSession:
                             "type": "step",
                             "episode": self.current_episode,
                             "step": step_count,
-                            "agent_position": list(next_state),
+                            "agent_position": [next_state[0], next_state[1]],
+                            "key_mask": step_next_mask,
+                            "has_key": bool(step_next_mask & 1),
                             "action": action,
                             "reward": reward,
                             "done": done,
                             "epsilon": self.agent.epsilon,
-                            "q_values": self.agent.Q[state],
-                            "state": list(state),
-                            "next_state": list(next_state)
+                            "q_values": self.agent.Q.get(state, {}),
+                            "state": [state[0], state[1]],
+                            "next_state": [next_state[0], next_state[1]]
                         })
                         await asyncio.sleep(self.speed_delay_ms / 1000.0)
 
@@ -226,15 +236,18 @@ class TrainingSession:
         steps = 0
         max_demo_steps = max(80, self.config.rows * self.config.cols * 2)
 
+        start_mask = state[2] if len(state) > 2 else 0
         await broadcast_fn({
             "type": "policy_demo_start",
-            "start": list(state),
-            "goal": list(self.env.goal)
+            "start": [self.env.start[0], self.env.start[1]],
+            "goal": [self.env.goal[0], self.env.goal[1]],
+            "key_mask": start_mask,
+            "has_key": bool(start_mask & 1)
         })
 
         await asyncio.sleep(step_delay_ms / 1000.0)
 
-        path = [list(state)]
+        path = [[state[0], state[1]]]
         total_reward = 0.0
 
         while not done and steps < max_demo_steps:
@@ -242,13 +255,17 @@ class TrainingSession:
             action = self.agent.choose_action(state, greedy=True)
             next_state, reward, done = self.env.step(state, action)
             total_reward += reward
-            path.append(list(next_state))
+            path.append([next_state[0], next_state[1]])
+
+            next_mask = next_state[2] if len(next_state) > 2 else 0
 
             await broadcast_fn({
                 "type": "policy_demo_step",
                 "step": steps,
-                "agent_position": list(next_state),
-                "from_state": list(state),
+                "agent_position": [next_state[0], next_state[1]],
+                "key_mask": next_mask,
+                "has_key": bool(next_mask & 1),
+                "from_state": [state[0], state[1]],
                 "action": action,
                 "reward": reward,
                 "done": done,
@@ -258,9 +275,10 @@ class TrainingSession:
             state = next_state
             await asyncio.sleep(step_delay_ms / 1000.0)
 
+        is_goal_reached = done and (state[0] == self.env.goal[0] and state[1] == self.env.goal[1])
         await broadcast_fn({
             "type": "policy_demo_finished",
-            "success": done and state == self.env.goal,
+            "success": is_goal_reached,
             "total_steps": steps,
             "total_reward": round(total_reward, 2),
             "path": path

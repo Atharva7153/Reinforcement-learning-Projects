@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Eye } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, KeyRound, DoorClosed } from 'lucide-react';
 
 const ACTIONS = [
   { key: 'up', label: 'Up', Icon: ArrowUp },
@@ -10,9 +10,11 @@ const ACTIONS = [
 
 export default function CellInspector({
   selectedCell, qTable, bestActions, start, goal,
-  obstacles = [], cliffs = [], mud = [], ice = [], portals = [],
+  obstacles = [], cliffs = [], mud = [], ice = [], portals = [], doors = [],
   stateValues = {}, visitCounts = {}
 }) {
+  const [inspectKeyMode, setInspectKeyMode] = useState(0);
+
   if (!selectedCell) {
     return (
       <div className="card">
@@ -26,24 +28,38 @@ export default function CellInspector({
 
   const [r, c] = selectedCell;
   const key = `${r},${c}`;
-  const cq = qTable?.[key];
-  const ba = bestActions?.[key];
+  const keyWithMask = `${r},${c},${inspectKeyMode}`;
+
+  // If doors exist, use masked lookup if present, fallback to base
+  const cq = (doors.length > 0 && qTable?.[keyWithMask] !== undefined)
+    ? qTable[keyWithMask]
+    : qTable?.[key];
+  const ba = (doors.length > 0 && bestActions?.[keyWithMask] !== undefined)
+    ? bestActions[keyWithMask]
+    : bestActions?.[key];
+
   const isObs = obstacles.some(([or, oc]) => or === r && oc === c);
   const isCliff = cliffs.some(([cr, cc]) => cr === r && cc === c);
   const isMud = mud.some(([mr, mc]) => mr === r && mc === c);
   const isIce = ice.some(([ir, ic]) => ir === r && ic === c);
   const portalEntry = (portals || []).find((p) => p[0] === r && p[1] === c);
   const portalExit = (portals || []).find((p) => p.length >= 4 && p[2] === r && p[3] === c);
+  const doorItem = (doors || []).find((d) => d[0] === r && d[1] === c);
+  const keyItem = (doors || []).find((d) => d[2] === r && d[3] === c);
   const isGoal = goal[0] === r && goal[1] === c;
   const isStart = start[0] === r && start[1] === c;
 
-  const stateVal = stateValues?.[key] ?? (cq ? Math.max(...Object.values(cq)) : 0);
+  const stateVal = (doors.length > 0 && stateValues?.[keyWithMask] !== undefined)
+    ? stateValues[keyWithMask]
+    : (stateValues?.[key] ?? (cq ? Math.max(...Object.values(cq)) : 0));
   const visits = visitCounts?.[key] ?? 0;
 
   let typeLabel = 'Empty State';
   let typePill = 'pill-black';
   if (isGoal) { typeLabel = 'Goal (+100)'; typePill = 'pill-green'; }
   else if (isObs) { typeLabel = 'Wall'; typePill = 'pill-red'; }
+  else if (doorItem) { typeLabel = `Door → Key at [${doorItem[2]}, ${doorItem[3]}]`; typePill = 'pill-orange'; }
+  else if (keyItem) { typeLabel = `Key → Door at [${keyItem[0]}, ${keyItem[1]}]`; typePill = 'pill-yellow'; }
   else if (isCliff) { typeLabel = 'Cliff / Lava (-50)'; typePill = 'pill-orange'; }
   else if (isMud) { typeLabel = 'Mud Swamp (-5)'; typePill = 'pill-brown'; }
   else if (isIce) { typeLabel = 'Ice (Slippery)'; typePill = 'pill-cyan'; }
@@ -64,6 +80,47 @@ export default function CellInspector({
           </div>
           <span className={`pill ${typePill}`}>{typeLabel}</span>
         </div>
+
+        {/* State slice tabs if doors exist */}
+        {doors.length > 0 && !isObs && (
+          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-neutral-150">
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#999' }}>Slice:</span>
+            <button
+              type="button"
+              onClick={() => setInspectKeyMode(0)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 7px',
+                borderRadius: 5,
+                border: '1px solid',
+                borderColor: inspectKeyMode === 0 ? '#d97706' : '#e5e5e5',
+                background: inspectKeyMode === 0 ? '#fffbeb' : 'white',
+                color: inspectKeyMode === 0 ? '#b45309' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              Without Key (S₀)
+            </button>
+            <button
+              type="button"
+              onClick={() => setInspectKeyMode(1)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 7px',
+                borderRadius: 5,
+                border: '1px solid',
+                borderColor: inspectKeyMode === 1 ? '#16a34a' : '#e5e5e5',
+                background: inspectKeyMode === 1 ? '#f0fdf4' : 'white',
+                color: inspectKeyMode === 1 ? '#15803d' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              With Key (S₁)
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card-section">

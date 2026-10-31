@@ -1,8 +1,8 @@
 import React from 'react';
-import { Bot, Flag, Ban, Eraser, Play, Pause, RotateCcw, Zap, Flame, Waves, Snowflake, Orbit, Layers } from 'lucide-react';
+import { Bot, Flag, Ban, Eraser, Play, Pause, RotateCcw, Zap, Flame, Waves, Snowflake, Orbit, Layers, KeyRound, DoorClosed } from 'lucide-react';
 
 export default function ControlPanel({
-  trainingStatus, activeTool, setActiveTool, pendingPortalEntry = null,
+  trainingStatus, activeTool, setActiveTool, pendingPortalEntry = null, pendingDoor = null,
   onStart, onPause, onResume, onReset, onRunPolicy,
   delayMs, onSpeedChange,
   showQValues, setShowQValues, showPolicyArrows, setShowPolicyArrows,
@@ -16,6 +16,7 @@ export default function ControlPanel({
     { id: 'agent', label: 'Agent', icon: <Bot size={14} />, color: '#0066ff' },
     { id: 'goal', label: 'Goal', icon: <Flag size={14} />, color: '#00c853' },
     { id: 'wall', label: 'Wall', icon: <Ban size={14} />, color: '#ff1744' },
+    { id: 'door', label: 'Door/Key', icon: <KeyRound size={14} />, color: '#d97706' },
     { id: 'cliff', label: 'Cliff', icon: <Flame size={14} />, color: '#e65100' },
     { id: 'mud', label: 'Mud', icon: <Waves size={14} />, color: '#8d6e63' },
     { id: 'ice', label: 'Ice', icon: <Snowflake size={14} />, color: '#00bcd4' },
@@ -32,17 +33,19 @@ export default function ControlPanel({
           <span
             style={{
               fontSize: 11,
-              color: activeTool === 'portal' ? '#ab47bc' : '#bbb',
-              fontWeight: activeTool === 'portal' ? 700 : 500,
+              color: activeTool === 'door' ? '#d97706' : activeTool === 'portal' ? '#ab47bc' : '#bbb',
+              fontWeight: (activeTool === 'door' || activeTool === 'portal') ? 700 : 500,
               marginLeft: 'auto'
             }}
           >
-            {activeTool === 'portal'
+            {activeTool === 'door'
+              ? (pendingDoor ? 'Click 2nd cell: Key' : 'Click 1st cell: Door')
+              : activeTool === 'portal'
               ? (pendingPortalEntry ? 'Click 2nd cell: Exit' : 'Click 1st cell: Entry')
               : 'Select tool & click grid'}
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 sm:gap-2">
           {tools.map(({ id, label, icon, color }) => (
             <button
               key={id}

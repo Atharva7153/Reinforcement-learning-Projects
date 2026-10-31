@@ -240,6 +240,7 @@ button, input[type="range"] {
 .pill-cyan { background: #e0f7fa; color: #00838f; border-color: #80deea; }
 .pill-brown { background: #efebe9; color: #4e342e; border-color: #bcaaa4; }
 .pill-purple { background: #f3e5f5; color: #6a1b9a; border-color: #ce93d8; }
+.pill-yellow { background: #fefce8; color: #a16207; border-color: #fde047; }
 
 /* --- Buttons --- */
 .btn {
@@ -447,6 +448,47 @@ button, input[type="range"] {
   50% {
     box-shadow: 0 0 0 3px rgba(171, 71, 188, 0.7), inset 0 0 14px rgba(171, 71, 188, 0.45);
   }
+}
+
+.rl-cell.is-door {
+  background: #fff8f0;
+  border-color: #d97706 !important;
+  box-shadow: inset 0 0 8px rgba(217, 119, 6, 0.15);
+}
+
+.rl-cell.is-door.is-door-unlocked {
+  background: #f0fdf4 !important;
+  border-color: #22c55e !important;
+  border-style: dashed !important;
+  box-shadow: inset 0 0 10px rgba(34, 197, 94, 0.2) !important;
+}
+
+.rl-cell.is-door-pending {
+  background: #fffbeb !important;
+  border-color: #b45309 !important;
+  border-style: dashed !important;
+  animation: door-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes door-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35), inset 0 0 8px rgba(217, 119, 6, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.7), inset 0 0 14px rgba(217, 119, 6, 0.4);
+  }
+}
+
+.rl-cell.is-key {
+  background: #fefce8;
+  border-color: #eab308 !important;
+  box-shadow: inset 0 0 10px rgba(234, 179, 8, 0.2);
+}
+
+.rl-cell.is-key.is-key-collected {
+  opacity: 0.65;
+  border-style: dotted !important;
+  border-color: #ca8a04 !important;
 }
 
 .rl-cell.is-goal {

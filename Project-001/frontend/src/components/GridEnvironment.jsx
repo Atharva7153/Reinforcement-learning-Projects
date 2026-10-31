@@ -1,10 +1,12 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit, Play, Pause, SkipBack, SkipForward, X } from 'lucide-react';
+import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit, Play, Pause, SkipBack, SkipForward, X, KeyRound, DoorClosed, DoorOpen } from 'lucide-react';
 
 export default function GridEnvironment({
   rows, cols, start, goal,
   obstacles = [], cliffs = [], mud = [], ice = [], portals = [],
+  doors = [], pendingDoor = null, currentKeyMask = 0,
+  policyKeyView = 0, onTogglePolicyKeyView = null,
   pendingPortalEntry = null,
   agentPosition, qTable, bestActions, stateValues = {}, visitCounts = {},
   activeTool, onCellClick, selectedCell,
@@ -49,6 +51,29 @@ export default function GridEnvironment({
       }
     }
     return { isPortal: false, isPending: false, isEntry: false, isExit: false, index: -1 };
+  };
+
+  const isPendingDoorCell = (r, c) =>
+    pendingDoor && pendingDoor[0] === r && pendingDoor[1] === c;
+
+  const getDoorInfo = (r, c) => {
+    if (isPendingDoorCell(r, c)) {
+      return { isDoor: true, isPending: true, isKey: false, index: -1 };
+    }
+    for (let i = 0; i < doors.length; i++) {
+      const d = doors[i];
+      if (d.length >= 4) {
+        if (d[0] === r && d[1] === c) {
+          const isUnlocked = Boolean(currentKeyMask & (1 << i));
+          return { isDoor: true, isPending: false, isKey: false, index: i, target: [d[2], d[3]], isUnlocked };
+        }
+        if (d[2] === r && d[3] === c) {
+          const isCollected = Boolean(currentKeyMask & (1 << i));
+          return { isDoor: false, isPending: false, isKey: true, index: i, target: [d[0], d[1]], isCollected };
+        }
+      }
+    }
+    return { isDoor: false, isPending: false, isKey: false, index: -1 };
   };
 
   // Responsive measurement for mobile screens
@@ -99,6 +124,7 @@ export default function GridEnvironment({
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
+      {/* Replay Banner */}
       {isReplayMode && (
         <motion.div
           initial={{ opacity: 0, y: -6 }}
@@ -118,123 +144,139 @@ export default function GridEnvironment({
           }}
         >
           {/* Episode Badge & Steps */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="flex items-center gap-2">
             <span
               style={{
-                background: '#fff8e8',
-                color: '#b35c00',
-                border: '1px solid #ffd990',
-                padding: '2px 8px',
-                borderRadius: 6,
+                fontFamily: 'JetBrains Mono',
                 fontSize: 11,
                 fontWeight: 800,
-                fontFamily: 'JetBrains Mono',
+                color: '#b35c00',
+                background: '#fff3e0',
+                padding: '2px 8px',
+                borderRadius: 6,
+                border: '1px solid #ffd59e',
               }}
             >
-              EP #{selectedReplayEpisode || '—'}
+              Ep {selectedReplayEpisode}
             </span>
-            <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#6b6b6b', fontWeight: 600 }}>
+            <span style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 600 }}>
               Step {replayStepIndex} / {Math.max(0, replayPath.length - 1)}
             </span>
           </div>
 
-          {/* Controls: Reset, Play/Pause, Next, Slider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Player controls */}
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onReplayStepChange && onReplayStepChange(0)}
-              title="Reset to Step 0"
-              style={{
-                background: '#f5f5f5',
-                border: '1px solid #e5e5e5',
-                borderRadius: 6,
-                padding: '4px 6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              onClick={() => onReplayStepChange && onReplayStepChange(Math.max(0, replayStepIndex - 1))}
+              disabled={replayStepIndex <= 0}
+              className="btn btn-white"
+              style={{ padding: '3px 7px', minWidth: 'auto', opacity: replayStepIndex <= 0 ? 0.4 : 1 }}
+              title="Previous Step"
             >
-              <SkipBack size={12} color="#444" />
+              <SkipBack size={12} />
             </button>
 
             <button
               type="button"
-              onClick={() => onToggleReplayPlay && onToggleReplayPlay(false)}
-              title={isReplayPlaying ? 'Pause' : 'Play Path'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                background: '#ff8f00',
-                color: 'white',
-                border: 'none',
-                borderRadius: 6,
-                padding: '4px 10px',
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(255,143,0,0.3)',
-              }}
+              onClick={onToggleReplayPlay}
+              className="btn btn-amber"
+              style={{ padding: '3px 9px', minWidth: 'auto' }}
+              title={isReplayPlaying ? 'Pause Replay' : 'Play Replay'}
             >
-              {isReplayPlaying ? <Pause size={11} fill="white" /> : <Play size={11} fill="white" />}
-              <span>{isReplayPlaying ? 'Pause' : 'Play'}</span>
+              {isReplayPlaying ? <Pause size={12} fill="white" /> : <Play size={12} fill="white" />}
             </button>
 
             <button
               type="button"
-              onClick={() =>
-                onReplayStepChange &&
-                onReplayStepChange((p) => Math.min(replayPath.length - 1, p + 1))
-              }
+              onClick={() => onReplayStepChange && onReplayStepChange(Math.min(replayPath.length - 1, replayStepIndex + 1))}
+              disabled={replayStepIndex >= replayPath.length - 1}
+              className="btn btn-white"
+              style={{ padding: '3px 7px', minWidth: 'auto', opacity: replayStepIndex >= replayPath.length - 1 ? 0.4 : 1 }}
               title="Next Step"
-              style={{
-                background: '#f5f5f5',
-                border: '1px solid #e5e5e5',
-                borderRadius: 6,
-                padding: '4px 6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
             >
-              <SkipForward size={12} color="#444" />
+              <SkipForward size={12} />
             </button>
 
-            <input
-              type="range"
-              min={0}
-              max={Math.max(0, replayPath.length - 1)}
-              value={replayStepIndex}
-              onChange={(e) => onReplayStepChange && onReplayStepChange(Number(e.target.value))}
-              style={{ width: 85, accentColor: '#ff8f00', cursor: 'pointer' }}
-            />
+            <button
+              type="button"
+              onClick={onExitReplay}
+              className="btn btn-white"
+              style={{ padding: '3px 7px', minWidth: 'auto', color: '#888', marginLeft: 4 }}
+              title="Exit Replay"
+            >
+              <X size={12} />
+            </button>
           </div>
-
-          {/* Exit Replay */}
-          <button
-            type="button"
-            onClick={onExitReplay}
-            title="Exit Replay"
-            style={{
-              background: '#fff0f0',
-              border: '1px solid #ffc0c0',
-              color: '#cc0000',
-              borderRadius: 6,
-              padding: '3px 8px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-            }}
-          >
-            <X size={11} />
-            <span>Exit</span>
-          </button>
         </motion.div>
       )}
 
+      {/* Door & Key Policy View Selector (if doors are configured) */}
+      {doors.length > 0 && !isReplayMode && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            maxWidth: 560,
+            padding: '6px 12px',
+            background: '#fffbf0',
+            border: '1.5px solid #fed7aa',
+            borderRadius: 10,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <KeyRound size={13} color="#d97706" />
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>
+              Policy View
+            </span>
+            <span style={{ fontSize: 10, color: '#b45309', opacity: 0.8 }}>
+              {policyKeyView === 0 ? '(Targeting Key)' : '(Targeting Goal via Open Door)'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onTogglePolicyKeyView && onTogglePolicyKeyView(0)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '3px 8px',
+                borderRadius: 6,
+                border: '1px solid',
+                borderColor: policyKeyView === 0 ? '#d97706' : '#fed7aa',
+                background: policyKeyView === 0 ? '#d97706' : 'white',
+                color: policyKeyView === 0 ? 'white' : '#92400e',
+                cursor: 'pointer',
+                transition: 'all 0.12s'
+              }}
+            >
+              🗝️ Need Key (S₀)
+            </button>
+            <button
+              type="button"
+              onClick={() => onTogglePolicyKeyView && onTogglePolicyKeyView(1)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '3px 8px',
+                borderRadius: 6,
+                border: '1px solid',
+                borderColor: policyKeyView === 1 ? '#16a34a' : '#fed7aa',
+                background: policyKeyView === 1 ? '#16a34a' : 'white',
+                color: policyKeyView === 1 ? 'white' : '#166534',
+                cursor: 'pointer',
+                transition: 'all 0.12s'
+              }}
+            >
+              🔓 Has Key (S₁)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Grid Table */}
       <div
         className="rl-grid"
         style={{
@@ -252,12 +294,21 @@ export default function GridEnvironment({
             const mudTile = isMud(r, c);
             const iceTile = isIce(r, c);
             const pInfo = getPortalInfo(r, c);
+            const dInfo = getDoorInfo(r, c);
             const goalHere = isGoal(r, c);
             const startHere = isStart(r, c);
             const agentHere = isAgent(r, c);
             const sel = isSel(r, c);
-            const cq = qTable?.[key];
-            const ba = bestActions?.[key];
+
+            // Lookup Q-table and policy arrows with key mask slice if doors present
+            const keyWithMask = `${r},${c},${policyKeyView}`;
+            const cq = (doors.length > 0 && qTable?.[keyWithMask] !== undefined)
+              ? qTable[keyWithMask]
+              : qTable?.[key];
+            const ba = (doors.length > 0 && bestActions?.[keyWithMask] !== undefined)
+              ? bestActions[keyWithMask]
+              : bestActions?.[key];
+
             const inReplay = isReplayMode && replayPath.some((p) => p[0] === r && p[1] === c);
 
             // Heatmap background calculation
@@ -284,6 +335,9 @@ export default function GridEnvironment({
                   ${iceTile ? 'is-ice' : ''}
                   ${pInfo.isPortal ? 'is-portal' : ''}
                   ${pInfo.isPending ? 'is-portal-pending' : ''}
+                  ${dInfo.isDoor ? (dInfo.isUnlocked || policyKeyView === 1 ? 'is-door is-door-unlocked' : 'is-door') : ''}
+                  ${dInfo.isPending ? 'is-door-pending' : ''}
+                  ${dInfo.isKey ? (dInfo.isCollected ? 'is-key is-key-collected' : 'is-key') : ''}
                   ${goalHere && !obs ? 'is-goal' : ''}
                   ${startHere && !obs && !goalHere ? 'is-start' : ''}
                   ${inReplay && !obs ? 'ring-2 ring-amber-300' : ''}
@@ -377,6 +431,77 @@ export default function GridEnvironment({
                   </motion.div>
                 )}
 
+                {/* Door (Locked or Unlocked) */}
+                {dInfo.isDoor && !obs && !cliff && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    className="flex flex-col items-center gap-0.5">
+                    {dInfo.isPending ? (
+                      <DoorClosed size={iconSize} color="#d97706" strokeWidth={2.4} className="animate-pulse" />
+                    ) : (dInfo.isUnlocked || policyKeyView === 1) ? (
+                      <DoorOpen size={iconSize} color="#16a34a" strokeWidth={2.4} />
+                    ) : (
+                      <DoorClosed size={iconSize} color="#d97706" strokeWidth={2.4} />
+                    )}
+                    {cellSize >= 54 && (
+                      <span style={{
+                        fontSize: 8, fontWeight: 800,
+                        color: dInfo.isPending ? '#b45309' : (dInfo.isUnlocked || policyKeyView === 1) ? '#16a34a' : '#b45309',
+                        textTransform: 'uppercase', letterSpacing: '-0.02em'
+                      }}>
+                        {dInfo.isPending
+                          ? 'DOOR...'
+                          : (dInfo.isUnlocked || policyKeyView === 1)
+                            ? (doors.length > 1 ? `OPEN #${dInfo.index + 1}` : 'OPEN')
+                            : (doors.length > 1 ? `DOOR #${dInfo.index + 1}` : 'DOOR')}
+                      </span>
+                    )}
+                    {cellSize < 54 && cellSize >= 32 && (
+                      <span style={{
+                        fontSize: 7, fontWeight: 800,
+                        color: (dInfo.isUnlocked || policyKeyView === 1) ? '#16a34a' : '#b45309',
+                        textTransform: 'uppercase'
+                      }}>
+                        {(dInfo.isUnlocked || policyKeyView === 1) ? 'OPEN' : 'DOOR'}
+                      </span>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Key (To Unlock Door) */}
+                {dInfo.isKey && !obs && !cliff && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    className="flex flex-col items-center gap-0.5">
+                    <KeyRound
+                      size={iconSize}
+                      color="#eab308"
+                      strokeWidth={2.4}
+                      style={{ opacity: dInfo.isCollected ? 0.45 : 1 }}
+                    />
+                    {cellSize >= 54 && (
+                      <span style={{
+                        fontSize: 8, fontWeight: 800,
+                        color: dInfo.isCollected ? '#a16207' : '#ca8a04',
+                        textTransform: 'uppercase', letterSpacing: '-0.02em',
+                        opacity: dInfo.isCollected ? 0.6 : 1
+                      }}>
+                        {dInfo.isCollected
+                          ? 'GOT KEY'
+                          : (doors.length > 1 ? `KEY #${dInfo.index + 1}` : 'KEY')}
+                      </span>
+                    )}
+                    {cellSize < 54 && cellSize >= 32 && (
+                      <span style={{
+                        fontSize: 7, fontWeight: 800,
+                        color: '#ca8a04',
+                        textTransform: 'uppercase',
+                        opacity: dInfo.isCollected ? 0.6 : 1
+                      }}>
+                        KEY
+                      </span>
+                    )}
+                  </motion.div>
+                )}
+
                 {/* Goal */}
                 {goalHere && !obs && !cliff && (
                   <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}
@@ -446,6 +571,8 @@ export default function GridEnvironment({
           { color: '#0066ff', label: 'Agent', shadow: 'rgba(0,102,255,0.4)' },
           { color: '#00c853', label: 'Goal (+100)', shadow: 'rgba(0,200,83,0.4)' },
           { color: '#ff1744', label: 'Wall', shadow: 'rgba(255,23,68,0.4)' },
+          { color: '#d97706', label: 'Door (Locked)', shadow: 'rgba(217,119,6,0.3)' },
+          { color: '#eab308', label: 'Key (Pick up)', shadow: 'rgba(234,179,8,0.4)' },
           { color: '#e65100', label: 'Cliff (-50)', shadow: 'rgba(230,81,0,0.4)' },
           { color: '#8d6e63', label: 'Mud (-5)', shadow: null },
           { color: '#00bcd4', label: 'Ice (Slip)', shadow: null },

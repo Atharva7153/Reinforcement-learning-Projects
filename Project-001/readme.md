@@ -33,8 +33,13 @@
 ## Core Features
 
 - **Interactive In-Grid Environment Builder:**
-  - Place obstacles, reposition the agent's start state, and set goal locations directly via mouse clicks using dedicated toolbar chips (`Agent`, `Goal`, `Wall`, `Erase`).
-  - Adaptive grid sizing (from $3 \times 3$ up to $8 \times 8$ or larger in the schema) with responsive cell geometry.
+  - Place obstacles, reposition the agent's start state, and set goal locations directly via mouse clicks using dedicated toolbar chips (`Agent`, `Goal`, `Wall`, `Door/Key`, `Cliff`, `Mud`, `Ice`, `Portal`, `Erase`).
+  - **Two-Click Door & Key Tool:** Click 1 drops a locked Door, Click 2 drops its corresponding Key. Doors act as impassable barriers until the agent picks up the key.
+  - Adaptive grid sizing (from $3 \times 3$ up to $20 \times 20$) with responsive cell geometry.
+
+- **Augmented MDP State Space & Multi-Policy Visualization:**
+  - When doors exist, the agent's state space expands to $(r, c, \text{has\_key})$, demonstrating state space augmentation in MDPs.
+  - Interactive **Policy Slice Toggle** (`Need Key (S0)` vs. `Has Key (S1)`) allowing users to watch the entire grid's directional policy arrows dynamically pivot from targeting the key to targeting the goal via the unlocked door.
 
 - **Real-Time Visual Overlays:**
   - **Q-Values Overlay:** Displays maximum estimated Q-values inside every state cell in real time.

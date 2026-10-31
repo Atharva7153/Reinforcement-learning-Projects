@@ -76,7 +76,8 @@ flowchart LR
 
 ### Core Capabilities of Project-001
 
-- **Interactive Environment Builder:** Add obstacles, reposition agent start states, and move goals dynamically using direct grid click-and-place tools.
+- **Interactive Environment Builder:** Add obstacles, cliffs, mud, ice, portals, and two-click **Doors & Keys**, reposition agent start states, and move goals dynamically using direct grid click-and-place tools.
+- **Augmented MDP State Space & Multi-Policy Visualization:** When doors exist, state space augments to $(r, c, \text{has\_key})$, featuring a real-time slice selector between `Need Key` and `Has Key` policies.
 - **Live Bidirectional Telemetry:** Stream training progress, instant rewards, 20-episode moving averages, and $\epsilon$-decay in real time over native WebSockets.
 - **Visual Overlays:** Toggle cardinal Q-values and optimal directional policy arrows ($\uparrow, \downarrow, \leftarrow, \rightarrow$) directly on each grid cell.
 - **Time-Travel Episode Replay:** Inspect historical episodes step-by-step with an interactive scrubber, detailed trajectory logs, and animated path playback.

@@ -255,3 +255,104 @@ export function playClickSound(volume = 0.15) {
     osc.stop(t + 0.02);
   } catch {}
 }
+
+/**
+ * Bright metallic chime when agent picks up a Key
+ */
+export function playKeySound(volume = 0.3) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const notes = [880, 1318.5, 1760]; // A5, E6, A6 chime
+    notes.forEach((freq, idx) => {
+      const t = ctx.currentTime + idx * 0.06;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.17);
+    });
+  } catch {}
+}
+
+/**
+ * Satisfying latch unlock and creak sound when Door opens
+ */
+export function playDoorOpenSound(volume = 0.28) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    
+    // Quick latch click
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(580, t);
+    osc1.frequency.exponentialRampToValueAtTime(180, t + 0.03);
+    gain1.gain.setValueAtTime(volume * 0.8, t);
+    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(t);
+    osc1.stop(t + 0.04);
+
+    // Warm resonant tone for door opening
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(420, t + 0.03);
+    osc2.frequency.exponentialRampToValueAtTime(560, t + 0.14);
+    gain2.gain.setValueAtTime(0.001, t + 0.03);
+    gain2.gain.linearRampToValueAtTime(volume, t + 0.06);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(t + 0.03);
+    osc2.stop(t + 0.19);
+  } catch {}
+}
+
+/**
+ * Heavy dull thud when agent bumps into a locked Door
+ */
+export function playDoorLockedSound(volume = 0.25) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    [0, 0.06].forEach((offset) => {
+      const t = ctx.currentTime + offset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(50, t + 0.04);
+
+      gain.gain.setValueAtTime(volume, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.05);
+    });
+  } catch {}
+}
