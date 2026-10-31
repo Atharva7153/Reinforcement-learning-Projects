@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Cpu, Wifi, WifiOff } from 'lucide-react';
+import { Cpu, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import GridEnvironment from './components/GridEnvironment';
 import ControlPanel from './components/ControlPanel';
 import TrainingStats from './components/TrainingStats';
@@ -11,7 +11,7 @@ import EpisodeHistory from './components/EpisodeHistory';
 import {
   createEnvironment,
   startTraining, pauseTraining, resumeTraining, resetTraining,
-  updateSpeed, runPolicyDemo, connectWebSocket,
+  updateSpeed, runPolicyDemo, connectWebSocket, getTrainingStatus, getQTable,
 } from './services/api';
 
 const DEFAULT_CONFIG = {
@@ -44,6 +44,8 @@ export default function App() {
   const [delayMs, setDelayMs] = useState(30);
   const [isPolicyRunning, setIsPolicyRunning] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   // Replay state
   const [isReplayMode, setIsReplayMode] = useState(false);
@@ -51,36 +53,9 @@ export default function App() {
   const [replayStepIndex, setReplayStepIndex] = useState(0);
 
   const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
-  const initSession = async (cfg) => {
-    wsRef.current?.close();
-    setIsReplayMode(false);
-    setReplayPath([]);
-    setReplayStepIndex(0);
-
-    const data = await createEnvironment(cfg);
-    setSessionId(data.session_id);
-    setTrainingStatus('idle');
-    setCurrentEpisode(0);
-    setCurrentStep(0);
-    setLastReward(0);
-    setAvgReward(0);
-    setEpsilon(cfg.epsilon);
-    setAgentPosition(cfg.start);
-    setSelectedCell(null);
-    setHistory([]);
-
-    const ws = connectWebSocket(
-      data.session_id,
-      handleMsg,
-      () => setConnected(false),
-      () => setConnected(false),
-    );
-    wsRef.current = ws;
-    setConnected(true);
-  };
-
-  const handleMsg = (msg) => {
+  const handleMsg = useCallback((msg) => {
     switch (msg.type) {
       case 'init':
         setTrainingStatus(msg.status || 'idle');
@@ -137,12 +112,94 @@ export default function App() {
         break;
       default: break;
     }
+  }, []);
+
+  const setupWebSocket = useCallback((sid) => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    const ws = connectWebSocket(
+      sid,
+      handleMsg,
+      () => setConnected(false),
+      () => {
+        setConnected(false);
+        // Attempt reconnect if still in this session
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (sessionId === sid) {
+            setupWebSocket(sid);
+          }
+        }, 3000);
+      },
+      () => setConnected(true),
+    );
+    wsRef.current = ws;
+  }, [handleMsg, sessionId]);
+
+  const initSession = async (cfg) => {
+    try {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      clearTimeout(reconnectTimeoutRef.current);
+      setIsReplayMode(false);
+      setReplayPath([]);
+      setReplayStepIndex(0);
+      setErrorMessage(null);
+
+      const data = await createEnvironment(cfg);
+      setSessionId(data.session_id);
+      setTrainingStatus('idle');
+      setCurrentEpisode(0);
+      setCurrentStep(0);
+      setLastReward(0);
+      setAvgReward(0);
+      setEpsilon(cfg.epsilon);
+      setAgentPosition(cfg.start);
+      setSelectedCell(null);
+      setHistory([]);
+
+      setupWebSocket(data.session_id);
+      return data.session_id;
+    } catch (err) {
+      console.error("Init session error:", err);
+      setErrorMessage("Connecting to backend... If this is the first load, Render may take 20s to wake up.");
+      return null;
+    }
   };
 
   useEffect(() => {
     initSession(DEFAULT_CONFIG);
-    return () => wsRef.current?.close();
+    return () => {
+      wsRef.current?.close();
+      clearTimeout(reconnectTimeoutRef.current);
+    };
   }, []);
+
+  // Background polling sync when training is active (bulletproof fallback if WS lags)
+  useEffect(() => {
+    if (trainingStatus !== 'training' || !sessionId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const status = await getTrainingStatus(sessionId);
+        setCurrentEpisode(status.current_episode);
+        setCurrentStep(status.current_step);
+        setLastReward(status.last_reward);
+        setEpsilon(status.epsilon);
+        if (status.status !== 'training') {
+          setTrainingStatus(status.status);
+          const qData = await getQTable(sessionId);
+          setQTable(qData.q_table);
+          setBestActions(qData.best_actions);
+        }
+      } catch (e) {
+        // ignore polling error
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [trainingStatus, sessionId]);
 
   // Cell editor
   const handleCellClick = (r, c) => {
@@ -170,44 +227,110 @@ export default function App() {
   };
 
   const handleStart = async () => {
-    if (!sessionId) return;
+    setIsStarting(true);
+    setErrorMessage(null);
     setIsReplayMode(false);
-    await startTraining(sessionId);
-    setTrainingStatus('training');
+
+    try {
+      let activeSid = sessionId;
+      if (!activeSid) {
+        activeSid = await initSession(config);
+        if (!activeSid) {
+          throw new Error("Could not initialize session with backend. Please check server status.");
+        }
+      }
+
+      await startTraining(activeSid);
+      setTrainingStatus('training');
+
+      // Also trigger via WebSocket if open
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "start" }));
+      }
+    } catch (err) {
+      console.error("Failed to start training:", err);
+      // Fallback: try starting directly via websocket
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "start" }));
+        setTrainingStatus('training');
+      } else {
+        setErrorMessage(err.response?.data?.detail || err.message || "Failed to start training");
+      }
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   const handlePause = async () => {
-    await pauseTraining(sessionId);
-    setTrainingStatus('paused');
+    try {
+      if (sessionId) await pauseTraining(sessionId);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "pause" }));
+      }
+      setTrainingStatus('paused');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleResume = async () => {
-    await resumeTraining(sessionId);
-    setTrainingStatus('training');
+    try {
+      if (sessionId) await resumeTraining(sessionId);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "resume" }));
+      }
+      setTrainingStatus('training');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleReset = async () => {
-    await resetTraining(sessionId);
-    setTrainingStatus('idle');
-    setCurrentEpisode(0);
-    setCurrentStep(0);
-    setLastReward(0);
-    setAvgReward(0);
-    setAgentPosition(config.start);
-    setHistory([]);
-    setIsReplayMode(false);
+    try {
+      if (sessionId) await resetTraining(sessionId);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "reset" }));
+      }
+      setTrainingStatus('idle');
+      setCurrentEpisode(0);
+      setCurrentStep(0);
+      setLastReward(0);
+      setAvgReward(0);
+      setAgentPosition(config.start);
+      setHistory([]);
+      setIsReplayMode(false);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSpeedChange = async (ms) => {
     setDelayMs(ms);
-    if (sessionId) await updateSpeed(sessionId, ms);
+    if (sessionId) {
+      try {
+        await updateSpeed(sessionId, ms);
+      } catch (err) {
+        console.error(err);
+      }
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "set_speed", delay_ms: ms }));
+      }
+    }
   };
 
   const handleRunPolicy = async () => {
     if (!sessionId) return;
     setIsReplayMode(false);
     setIsPolicyRunning(true);
-    await runPolicyDemo(sessionId, 220);
+    try {
+      await runPolicyDemo(sessionId, 220);
+    } catch (err) {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "run_demo", speed_ms: 220 }));
+      } else {
+        setIsPolicyRunning(false);
+      }
+    }
   };
 
   const handlePreset = (type) => {
@@ -283,7 +406,7 @@ export default function App() {
                 ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00c853', boxShadow: '0 0 6px rgba(0,200,83,0.6)' }} />
                 : <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ff1744' }} />
               }
-              {connected ? 'Backend Live' : 'Disconnected'}
+              {connected ? 'Backend Live' : 'Connecting...'}
             </div>
 
             {sessionId && (
@@ -297,6 +420,31 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Error alert banner if any */}
+      {errorMessage && (
+        <div style={{ maxWidth: 1400, margin: '16px auto 0', padding: '0 32px' }}>
+          <div style={{
+            background: '#fff0f0', border: '1.5px solid #ffc0c0', borderRadius: 12,
+            padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            color: '#cc0000', fontSize: 13, fontWeight: 600
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <AlertCircle size={16} />
+              <span>{errorMessage}</span>
+            </div>
+            <button
+              onClick={() => initSession(config)}
+              style={{
+                background: '#cc0000', color: 'white', border: 'none', borderRadius: 6,
+                padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MAIN LAYOUT */}
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '28px 32px', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 24, alignItems: 'start' }}>
@@ -389,6 +537,7 @@ export default function App() {
             showPolicyArrows={showPolicyArrows}
             setShowPolicyArrows={setShowPolicyArrows}
             isPolicyRunning={isPolicyRunning}
+            isStarting={isStarting}
           />
 
           <CellInspector

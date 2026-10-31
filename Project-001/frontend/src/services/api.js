@@ -69,14 +69,20 @@ export const getEpisodeDetail = async (sessionId, episodeNum) => {
   return res.data;
 };
 
-export const connectWebSocket = (sessionId, onMessage, onError, onClose) => {
-  const ws = new WebSocket(`${getWsBase()}/ws/training/${sessionId}`);
+export const connectWebSocket = (sessionId, onMessage, onError, onClose, onOpen) => {
+  const wsUrl = `${getWsBase()}/ws/training/${sessionId}`;
+  console.log(`[WS] Connecting to ${wsUrl}`);
+  const ws = new WebSocket(wsUrl);
 
-  ws.onopen = () => console.log(`[WS] Connected to session ${sessionId}`);
+  ws.onopen = () => {
+    console.log(`[WS] Connected to session ${sessionId}`);
+    if (onOpen) onOpen();
+  };
 
   ws.onmessage = (event) => {
     try {
-      onMessage(JSON.parse(event.data));
+      const parsed = JSON.parse(event.data);
+      onMessage(parsed);
     } catch (err) {
       console.error('[WS] Parse error', err);
     }

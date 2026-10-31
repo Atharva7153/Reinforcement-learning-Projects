@@ -35,11 +35,11 @@ class DemoRequest(BaseModel):
 # ── API Routes ────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
-def health():
+async def health():
     return {"status": "ok", "version": "1.0.0"}
 
 @app.post("/environment/create", response_model=CreateEnvironmentResponse)
-def create_environment(config: EnvironmentConfig):
+async def create_environment(config: EnvironmentConfig):
     session = session_manager.create_session(config)
     return CreateEnvironmentResponse(
         session_id=session.session_id,
@@ -48,42 +48,42 @@ def create_environment(config: EnvironmentConfig):
     )
 
 @app.post("/training/start")
-def start_training_post(payload: TrainingStartRequest):
+async def start_training_post(payload: TrainingStartRequest):
     success = session_manager.start_training(payload.session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "started", "session_id": payload.session_id}
 
 @app.post("/training/{session_id}/start")
-def start_training_by_id(session_id: str):
+async def start_training_by_id(session_id: str):
     success = session_manager.start_training(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "started", "session_id": session_id}
 
 @app.post("/training/{session_id}/pause")
-def pause_training(session_id: str):
+async def pause_training(session_id: str):
     success = session_manager.pause_training(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "paused", "session_id": session_id}
 
 @app.post("/training/{session_id}/resume")
-def resume_training(session_id: str):
+async def resume_training(session_id: str):
     success = session_manager.resume_training(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "resumed", "session_id": session_id}
 
 @app.post("/training/{session_id}/reset")
-def reset_training(session_id: str):
+async def reset_training(session_id: str):
     success = session_manager.reset_training(session_id)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "reset", "session_id": session_id}
 
 @app.post("/training/{session_id}/speed")
-def update_speed(session_id: str, payload: SpeedUpdate):
+async def update_speed(session_id: str, payload: SpeedUpdate):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -91,14 +91,14 @@ def update_speed(session_id: str, payload: SpeedUpdate):
     return {"status": "speed_updated", "delay_ms": session.speed_delay_ms}
 
 @app.post("/training/{session_id}/demo")
-def run_demo(session_id: str, payload: DemoRequest = DemoRequest()):
+async def run_demo(session_id: str, payload: DemoRequest = DemoRequest()):
     success = session_manager.run_policy_demo(session_id, speed_ms=payload.speed_ms or 250)
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "demo_started", "session_id": session_id}
 
 @app.get("/training/{session_id}/status", response_model=TrainingStatusResponse)
-def get_status(session_id: str):
+async def get_status(session_id: str):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -114,7 +114,7 @@ def get_status(session_id: str):
     )
 
 @app.get("/training/{session_id}/q-table", response_model=QTableResponse)
-def get_q_table(session_id: str):
+async def get_q_table(session_id: str):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -125,14 +125,14 @@ def get_q_table(session_id: str):
     )
 
 @app.get("/training/{session_id}/episodes")
-def get_episodes(session_id: str):
+async def get_episodes(session_id: str):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"session_id": session_id, "episodes": session.get_episodes_summary()}
 
 @app.get("/training/{session_id}/episode/{episode_num}")
-def get_episode_detail(session_id: str, episode_num: int):
+async def get_episode_detail(session_id: str, episode_num: int):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

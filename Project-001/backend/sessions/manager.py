@@ -32,7 +32,7 @@ class SessionManager:
     async def broadcast(self, session_id: str, message: Dict[str, Any]):
         if session_id in self.connections:
             dead_sockets = set()
-            for ws in self.connections[session_id]:
+            for ws in list(self.connections[session_id]):
                 try:
                     await ws.send_json(message)
                 except Exception:
@@ -51,7 +51,12 @@ class SessionManager:
         async def broadcast_wrapper(data):
             await self.broadcast(session_id, data)
 
-        session._task = asyncio.create_task(session.start_training(broadcast_wrapper))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+
+        session._task = loop.create_task(session.start_training(broadcast_wrapper))
         return True
 
     def pause_training(self, session_id: str) -> bool:
@@ -83,7 +88,12 @@ class SessionManager:
         async def broadcast_wrapper(data):
             await self.broadcast(session_id, data)
 
-        asyncio.create_task(session.run_policy_demo(broadcast_wrapper, speed_ms))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+
+        loop.create_task(session.run_policy_demo(broadcast_wrapper, speed_ms))
         return True
 
 session_manager = SessionManager()

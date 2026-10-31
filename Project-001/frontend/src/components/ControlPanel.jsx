@@ -6,7 +6,7 @@ export default function ControlPanel({
   onStart, onPause, onResume, onReset, onRunPolicy,
   delayMs, onSpeedChange,
   showQValues, setShowQValues, showPolicyArrows, setShowPolicyArrows,
-  isPolicyRunning,
+  isPolicyRunning, isStarting = false,
 }) {
   const isTraining = trainingStatus === 'training';
   const isPaused = trainingStatus === 'paused';
@@ -58,9 +58,9 @@ export default function ControlPanel({
         <div className="flex flex-wrap gap-2">
           {/* Start / Pause / Resume */}
           {!isTraining && !isPaused && (
-            <button className="btn btn-black flex-1" onClick={onStart}>
+            <button className="btn btn-black flex-1" onClick={onStart} disabled={isStarting}>
               <Play size={15} fill="white" />
-              Start Learning
+              {isStarting ? 'Starting...' : 'Start Learning'}
             </button>
           )}
           {isTraining && (
