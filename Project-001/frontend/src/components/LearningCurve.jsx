@@ -96,17 +96,17 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
           </div>
 
           {/* Interactive Chart Type Tabs */}
-          <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-lg">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-neutral-100 p-1 rounded-lg">
             {[
-              { id: 'reward', label: 'Reward Curve', icon: TrendingUp },
-              { id: 'steps', label: 'Steps to Goal', icon: Zap },
+              { id: 'reward', label: 'Reward', icon: TrendingUp },
+              { id: 'steps', label: 'Steps', icon: Zap },
               { id: 'td_error', label: 'TD Loss', icon: Activity },
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => { setActiveTab(id); setHoverIndex(null); }}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-semibold transition-all ${
                   activeTab === id
                     ? 'bg-white text-black shadow-sm font-bold'
                     : 'text-neutral-500 hover:text-black'
@@ -121,8 +121,8 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
       </div>
 
       {/* SVG Canvas Area */}
-      <div className="card-section relative" style={{ padding: '12px 18px 16px' }}>
-        <div className="flex items-center justify-between text-xs font-mono text-neutral-500 mb-2">
+      <div className="card-section relative" style={{ padding: '12px 14px 16px' }}>
+        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] sm:text-xs font-mono text-neutral-500 mb-2">
           <span className="font-semibold text-neutral-800">{chartTitle}</span>
           <span className="text-[11px] text-neutral-400">Hover graph to inspect point · Click to replay</span>
         </div>

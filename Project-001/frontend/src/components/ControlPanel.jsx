@@ -42,7 +42,7 @@ export default function ControlPanel({
               : 'Select tool & click grid'}
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {tools.map(({ id, label, icon, color }) => (
             <button
               key={id}
@@ -51,15 +51,17 @@ export default function ControlPanel({
               onClick={() => setActiveTool(id)}
               className={`tool-chip ${activeTool === id ? 'active' : ''}`}
               style={{
-                padding: '7px 8px',
-                fontSize: 12,
+                padding: '6px 4px',
+                fontSize: 11,
                 justifyContent: 'center',
+                gap: 5,
               }}
             >
               {React.cloneElement(icon, {
+                size: 13,
                 color: activeTool === id ? 'white' : color,
               })}
-              <span>{label}</span>
+              <span className="truncate">{label}</span>
             </button>
           ))}
         </div>

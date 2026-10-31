@@ -51,16 +51,32 @@ export default function GridEnvironment({
     return { isPortal: false, isPending: false, isEntry: false, isExit: false, index: -1 };
   };
 
+  // Responsive measurement for mobile screens
+  const [screenWidth, setScreenWidth] = React.useState(
+    typeof window !== 'undefined' ? window.innerWidth : 800
+  );
+
+  React.useEffect(() => {
+    const onResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Responsive cell sizing for 3x3 up to 20x20
   const maxDim = Math.max(rows, cols);
-  let cellSize = 64;
-  if (maxDim <= 4) cellSize = 76;
-  else if (maxDim <= 6) cellSize = 62;
-  else if (maxDim <= 8) cellSize = 50;
-  else if (maxDim <= 10) cellSize = 42;
-  else if (maxDim <= 13) cellSize = 33;
-  else if (maxDim <= 16) cellSize = 27;
-  else cellSize = 23;
+  let baseCellSize = 64;
+  if (maxDim <= 4) baseCellSize = 76;
+  else if (maxDim <= 6) baseCellSize = 62;
+  else if (maxDim <= 8) baseCellSize = 50;
+  else if (maxDim <= 10) baseCellSize = 42;
+  else if (maxDim <= 13) baseCellSize = 33;
+  else if (maxDim <= 16) baseCellSize = 27;
+  else baseCellSize = 23;
+
+  // On small mobile screens, adapt cell size so grids up to 8x8 fit directly in the viewport
+  const availWidth = Math.max(260, screenWidth - 64);
+  const maxCellForScreen = Math.floor((availWidth - (cols - 1) * 5 - 12) / cols);
+  const cellSize = Math.max(22, Math.min(baseCellSize, Math.max(24, maxCellForScreen)));
 
   // Heatmap min/max calculations
   const valuesArray = Object.values(stateValues || {});

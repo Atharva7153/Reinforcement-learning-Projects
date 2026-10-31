@@ -27,12 +27,12 @@ export default function ConfigPanel({ config, onChange, onApply, isTraining, onL
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#bbb', marginBottom: 8 }}>
             Quick Presets
           </p>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
             {PRESETS.map(({ id, label }) => (
               <button key={id} type="button" disabled={isTraining}
                 onClick={() => onLoadPreset(id)}
                 style={{
-                  padding: '7px 2px', borderRadius: 7, fontSize: 11,
+                  padding: '7px 4px', borderRadius: 7, fontSize: 11,
                   fontWeight: 600, border: '1.5px solid #e5e5e5',
                   background: 'white', color: '#6b6b6b', cursor: 'pointer',
                   transition: 'all 0.12s', opacity: isTraining ? 0.4 : 1,
@@ -46,7 +46,7 @@ export default function ConfigPanel({ config, onChange, onApply, isTraining, onL
         </div>
 
         {/* Grid size: Rows and Cols up to 20x20 */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 sm:gap-y-4">
           {[
             { label: 'Rows', field: 'rows', min: 3, max: 20, value: config.rows },
             { label: 'Cols', field: 'cols', min: 3, max: 20, value: config.cols },

@@ -688,42 +688,33 @@ export default function App() {
           zIndex: 50,
         }}
       >
-        <div
-          style={{
-            maxWidth: 1440,
-            margin: '0 auto',
-            padding: '0 32px',
-            height: 60,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="nav-container">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
+                width: 34,
+                height: 34,
+                borderRadius: 9,
                 background: '#0a0a0a',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              <Cpu size={18} color="white" />
+              <Cpu size={17} color="white" />
             </div>
             <div>
-              <h1 style={{ fontSize: 16, fontWeight: 900, color: '#0a0a0a', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              <h1 style={{ fontSize: 15, fontWeight: 900, color: '#0a0a0a', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
                 RL Playground
               </h1>
-              <p style={{ fontSize: 11, color: '#bbb', fontFamily: 'JetBrains Mono', fontWeight: 500, letterSpacing: '0.04em', marginTop: 1 }}>
+              <p className="hidden sm:block" style={{ fontSize: 10, color: '#bbb', fontFamily: 'JetBrains Mono', fontWeight: 500, letterSpacing: '0.04em', marginTop: 1 }}>
                 Q-Learning · Stochastic Tiles · Multi-Graph Analytics
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               type="button"
               onClick={() => setSoundOn(toggleSound())}
@@ -731,57 +722,58 @@ export default function App() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 13px',
+                gap: 5,
+                padding: '5px 10px',
                 borderRadius: 100,
                 background: soundOn ? '#f5f5f5' : '#fff0f0',
                 border: `1.5px solid ${soundOn ? '#e5e5e5' : '#ffc0c0'}`,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 700,
                 color: soundOn ? '#0a0a0a' : '#cc0000',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
             >
-              {soundOn ? <Volume2 size={14} color="#0a0a0a" /> : <VolumeX size={14} color="#cc0000" />}
-              <span>{soundOn ? 'SFX ON' : 'SFX MUTED'}</span>
+              {soundOn ? <Volume2 size={13} color="#0a0a0a" /> : <VolumeX size={13} color="#cc0000" />}
+              <span>{soundOn ? 'SFX' : 'MUTED'}</span>
             </button>
 
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 7,
-                padding: '6px 14px',
+                gap: 6,
+                padding: '5px 10px',
                 borderRadius: 100,
                 background: connected ? '#edfff5' : '#fff0f0',
                 border: `1.5px solid ${connected ? '#b3f0cf' : '#ffc0c0'}`,
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 700,
                 color: connected ? '#00843d' : '#cc0000',
               }}
             >
               {connected ? (
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00c853', boxShadow: '0 0 6px rgba(0,200,83,0.6)' }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00c853', boxShadow: '0 0 6px rgba(0,200,83,0.6)' }} />
               ) : (
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ff1744' }} />
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff1744' }} />
               )}
-              {connected ? 'Backend Live' : 'Connecting...'}
+              <span>{connected ? 'Live' : '...'}</span>
             </div>
 
             {sessionId && (
               <div
+                className="hidden md:flex"
                 style={{
-                  padding: '6px 14px',
+                  padding: '5px 12px',
                   borderRadius: 100,
                   border: '1.5px solid #e5e5e5',
-                  fontSize: 12,
+                  fontSize: 11,
                   fontFamily: 'JetBrains Mono',
                   fontWeight: 600,
                   color: '#6b6b6b',
                 }}
               >
-                session: <span style={{ color: '#0a0a0a', fontWeight: 700 }}>{sessionId}</span>
+                session: <span style={{ color: '#0a0a0a', fontWeight: 700, marginLeft: 4 }}>{sessionId}</span>
               </div>
             )}
           </div>
@@ -790,23 +782,23 @@ export default function App() {
 
       {/* Error alert banner */}
       {errorMessage && (
-        <div style={{ maxWidth: 1440, margin: '16px auto 0', padding: '0 32px' }}>
+        <div style={{ maxWidth: 1440, margin: '14px auto 0', padding: '0 16px' }}>
           <div
             style={{
               background: '#fff0f0',
               border: '1.5px solid #ffc0c0',
               borderRadius: 12,
-              padding: '12px 18px',
+              padding: '10px 14px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               color: '#cc0000',
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 600,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <AlertCircle size={16} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={15} />
               <span>{errorMessage}</span>
             </div>
             <button
@@ -816,8 +808,8 @@ export default function App() {
                 color: 'white',
                 border: 'none',
                 borderRadius: 6,
-                padding: '4px 10px',
-                fontSize: 12,
+                padding: '3px 8px',
+                fontSize: 11,
                 fontWeight: 700,
                 cursor: 'pointer',
               }}
@@ -829,19 +821,9 @@ export default function App() {
       )}
 
       {/* MAIN WORKSPACE */}
-      <div
-        style={{
-          maxWidth: 1440,
-          margin: '0 auto',
-          padding: '28px 32px',
-          display: 'grid',
-          gridTemplateColumns: '1fr 420px',
-          gap: 24,
-          alignItems: 'start',
-        }}
-      >
+      <div className="main-workspace-container">
         {/* LEFT COLUMN: Stats + Grid + Interactive Analytics + Replayer */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Training Stats */}
           <TrainingStats
             trainingStatus={trainingStatus}
@@ -855,9 +837,9 @@ export default function App() {
 
           {/* Grid World Card */}
           <div className="card">
-            <div className="card-section" style={{ borderBottom: '1.5px solid #e5e5e5', paddingBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="card-section" style={{ borderBottom: '1.5px solid #e5e5e5', paddingBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div
                     style={{
                       width: 8,
@@ -871,13 +853,13 @@ export default function App() {
                     GridWorld {config.rows}×{config.cols} ({config.rows * config.cols} States)
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#bbb', fontWeight: 500 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#bbb', fontWeight: 500 }}>
                   <span>Tool: <strong className="text-neutral-800 uppercase">{activeTool}</strong></span>
                 </div>
               </div>
             </div>
 
-            <div className="card-section" style={{ display: 'flex', justifyContent: 'center', padding: '24px 20px', overflowX: 'auto' }}>
+            <div className="rl-grid-container">
               <GridEnvironment
                 rows={config.rows}
                 cols={config.cols}
@@ -942,7 +924,7 @@ export default function App() {
         </div>
 
         {/* RIGHT COLUMN: Controls + Inspector + Configuration */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 80 }}>
+        <div className="right-column-container">
           <ControlPanel
             trainingStatus={trainingStatus}
             activeTool={activeTool}
@@ -993,12 +975,12 @@ export default function App() {
       </div>
 
       {/* FOOTER */}
-      <footer style={{ borderTop: '1.5px solid #e5e5e5', background: 'white', padding: '16px 32px', marginTop: 32 }}>
-        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#bbb', fontFamily: 'JetBrains Mono' }}>
+      <footer style={{ borderTop: '1.5px solid #e5e5e5', background: 'white', padding: '16px 20px', marginTop: 28 }}>
+        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#bbb', fontFamily: 'JetBrains Mono' }}>
             Q-Learning · Stochastic MDPs · Dynamic GridWorld (Up to 20×20)
           </span>
-          <span style={{ fontSize: 12, color: '#bbb' }}>
+          <span style={{ fontSize: 11, color: '#bbb' }}>
             RL Playground
           </span>
         </div>

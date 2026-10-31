@@ -74,12 +74,15 @@ export default function EpisodeHistory({
 
       <div className="card-section">
         {/* Input + Inspect & Play buttons */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <div style={{
-            flex: 1, display: 'flex', alignItems: 'center', gap: 6,
-            border: '1.5px solid #e5e5e5', borderRadius: 10, padding: '0 12px',
-            background: '#fafafa',
-          }}>
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 mb-2.5">
+          <div
+            className="flex-1 min-w-[120px]"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              border: '1.5px solid #e5e5e5', borderRadius: 10, padding: '0 12px',
+              background: '#fafafa',
+            }}
+          >
             <span style={{ fontSize: 12, color: '#bbb', fontFamily: 'JetBrains Mono', fontWeight: 600 }}>Ep #</span>
             <input
               type="number" min={1} max={currentEpisode || 1}
@@ -90,7 +93,7 @@ export default function EpisodeHistory({
               style={{
                 flex: 1, background: 'transparent', border: 'none', outline: 'none',
                 fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 700, color: '#0a0a0a',
-                padding: '9px 0',
+                padding: '9px 0', width: '100%', minWidth: 40,
               }}
             />
           </div>
@@ -98,7 +101,7 @@ export default function EpisodeHistory({
             type="button"
             disabled={isTraining || !currentEpisode || !targetEpisode || Number(targetEpisode) < 1 || Number(targetEpisode) > currentEpisode || loading}
             onClick={() => loadEpisode(Number(targetEpisode), false)}
-            className="btn btn-white"
+            className="btn btn-white flex-1 sm:flex-none"
             style={{ fontSize: 12, padding: '8px 12px' }}
           >
             {loading ? 'Loading…' : 'Inspect'}
@@ -107,7 +110,7 @@ export default function EpisodeHistory({
             type="button"
             disabled={isTraining || !currentEpisode || !targetEpisode || Number(targetEpisode) < 1 || Number(targetEpisode) > currentEpisode || loading}
             onClick={() => loadEpisode(Number(targetEpisode), true)}
-            className="btn btn-black"
+            className="btn btn-black flex-1 sm:flex-none"
             style={{ fontSize: 12, padding: '8px 14px' }}
           >
             <Play size={12} fill="white" />
@@ -197,7 +200,7 @@ export default function EpisodeHistory({
             </div>
 
             {/* Playback controls */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => onStepChange(0)} type="button" className="btn btn-ghost btn-sm" title="Reset to start">
                   <SkipBack size={13} />

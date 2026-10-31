@@ -46,17 +46,141 @@ body {
 .card {
   background: var(--white);
   border: 1.5px solid var(--border-light);
-  border-radius: 16px;
+  border-radius: 14px;
   overflow: hidden;
 }
 
+@media (min-width: 640px) {
+  .card {
+    border-radius: 16px;
+  }
+}
+
 .card-section {
-  padding: 20px 24px;
+  padding: 14px 16px;
+}
+
+@media (min-width: 640px) {
+  .card-section {
+    padding: 20px 24px;
+  }
 }
 
 .card-divider {
   height: 1px;
   background: var(--border-light);
+}
+
+/* --- Mobile Responsive Layout Helpers --- */
+.main-workspace-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 14px 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .main-workspace-container {
+    padding: 24px 28px;
+    grid-template-columns: 1fr 390px;
+    gap: 24px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .main-workspace-container {
+    padding: 28px 32px;
+    grid-template-columns: 1fr 420px;
+  }
+}
+
+.right-column-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .right-column-container {
+    gap: 20px;
+    position: sticky;
+    top: 80px;
+  }
+}
+
+.nav-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 14px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .nav-container {
+    padding: 0 32px;
+    height: 60px;
+    gap: 12px;
+  }
+}
+
+/* Stats responsive grid */
+.stats-grid-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 640px) {
+  .stats-grid-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-cell {
+  padding: 12px 14px;
+  border-bottom: 1.5px solid #e5e5e5;
+}
+
+.stat-cell:nth-child(odd) {
+  border-right: 1.5px solid #e5e5e5;
+}
+
+@media (min-width: 640px) {
+  .stat-cell {
+    padding: 16px 20px;
+    border-bottom: none;
+  }
+  .stat-cell:nth-child(odd) {
+    border-right: none;
+  }
+  .stat-cell:not(:last-child) {
+    border-right: 1.5px solid #e5e5e5;
+  }
+}
+
+/* Touch and smooth scrolling */
+.rl-grid-container {
+  display: flex;
+  justify-content: center;
+  padding: 16px 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 640px) {
+  .rl-grid-container {
+    padding: 24px 20px;
+  }
+}
+
+button, input[type="range"] {
+  touch-action: manipulation;
 }
 
 /* --- Stat Number Block --- */
