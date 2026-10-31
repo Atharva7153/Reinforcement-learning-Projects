@@ -11,6 +11,7 @@ const ACTIONS = [
 export default function CellInspector({
   selectedCell, qTable, bestActions, start, goal,
   obstacles = [], cliffs = [], mud = [], ice = [], portals = [],
+  portalPairs = [], pendingPortalEntrance = null,
   stateValues = {}, visitCounts = {}
 }) {
   if (!selectedCell) {
@@ -32,9 +33,13 @@ export default function CellInspector({
   const isCliff = cliffs.some(([cr, cc]) => cr === r && cc === c);
   const isMud = mud.some(([mr, mc]) => mr === r && mc === c);
   const isIce = ice.some(([ir, ic]) => ir === r && ic === c);
-  const isPortal = portals.some(([pr, pc]) => pr === r && pc === c);
   const isGoal = goal[0] === r && goal[1] === c;
   const isStart = start[0] === r && start[1] === c;
+
+  const effectivePortalPairs = portalPairs.length > 0 ? portalPairs : portals.filter(p => Array.isArray(p) && p.length >= 4);
+  const entIdx = effectivePortalPairs.findIndex(([r1, c1]) => r1 === r && c1 === c);
+  const exitIdx = effectivePortalPairs.findIndex(([, , r2, c2]) => r2 === r && c2 === c);
+  const isPending = Boolean(pendingPortalEntrance && pendingPortalEntrance[0] === r && pendingPortalEntrance[1] === c);
 
   const stateVal = stateValues?.[key] ?? (cq ? Math.max(...Object.values(cq)) : 0);
   const visits = visitCounts?.[key] ?? 0;
@@ -46,7 +51,17 @@ export default function CellInspector({
   else if (isCliff) { typeLabel = 'Cliff / Lava (-50)'; typePill = 'pill-orange'; }
   else if (isMud) { typeLabel = 'Mud Swamp (-5)'; typePill = 'pill-brown'; }
   else if (isIce) { typeLabel = 'Ice (Slippery)'; typePill = 'pill-cyan'; }
-  else if (isPortal) { typeLabel = 'Wormhole Portal'; typePill = 'pill-purple'; }
+  else if (isPending) { typeLabel = 'Portal IN (Pending Exit)'; typePill = 'pill-purple'; }
+  else if (entIdx !== -1) {
+    const dest = [effectivePortalPairs[entIdx][2], effectivePortalPairs[entIdx][3]];
+    typeLabel = `Portal IN #${entIdx + 1} → [${dest[0]}, ${dest[1]}]`;
+    typePill = 'pill-purple';
+  }
+  else if (exitIdx !== -1) {
+    const origin = [effectivePortalPairs[exitIdx][0], effectivePortalPairs[exitIdx][1]];
+    typeLabel = `Portal OUT #${exitIdx + 1} (from [${origin[0]}, ${origin[1]}])`;
+    typePill = 'pill-purple';
+  }
   else if (isStart) { typeLabel = 'Agent Start'; typePill = 'pill-blue'; }
 
   return (

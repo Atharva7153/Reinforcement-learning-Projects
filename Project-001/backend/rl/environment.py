@@ -29,14 +29,13 @@ class GridEnvironment:
             if (i[0], i[1]) != self.start and (i[0], i[1]) != self.goal and (i[0], i[1]) not in self.obstacles
         }
 
-        # Portals mapping: bidirectional teleportation between pair (r1, c1) <-> (r2, c2)
+        # Portals mapping: directed teleportation from Entrance (r1, c1) -> Exit (r2, c2)
         self.portal_map: Dict[Tuple[int, int], Tuple[int, int]] = {}
         for p in config.portals:
             if len(p) >= 4:
                 p1 = (p[0], p[1])
                 p2 = (p[2], p[3])
                 self.portal_map[p1] = p2
-                self.portal_map[p2] = p1
 
         self.goal_reward = config.goal_reward
         self.step_penalty = config.step_penalty

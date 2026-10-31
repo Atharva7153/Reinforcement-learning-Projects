@@ -306,7 +306,13 @@ body {
 .rl-cell.is-portal {
   background: #f7eefa;
   border-color: #ab47bc !important;
-  box-shadow: inset 0 0 10px rgba(171, 71, 188, 0.2);
+  box-shadow: inset 0 0 10px rgba(171, 71, 188, 0.25);
+}
+
+.rl-cell.is-portal-exit {
+  background: #fbf5fc;
+  border-color: #ba68c8 !important;
+  box-shadow: inset 0 0 8px rgba(186, 104, 200, 0.2);
 }
 
 .rl-cell.is-goal {
@@ -341,7 +347,7 @@ body {
 /* Q-Values overlay */
 .q-vals-overlay {
   position: absolute;
-  inset: 0;
+  inset: 1px;
   display: grid;
   grid-template-areas:
     ". up ."
@@ -351,12 +357,27 @@ body {
   grid-template-rows: 1fr 1fr 1fr;
   pointer-events: none;
   font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 600;
+  font-size: 7.5px;
+  font-weight: 700;
+  line-height: 1;
+  z-index: 2;
 }
 
-.q-val { display: flex; align-items: center; justify-content: center; color: #bbb; }
-.q-val.best { color: #00a844; font-weight: 700; }
+.q-val {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.q-val.best {
+  color: #00843d;
+  font-weight: 800;
+  background: rgba(0, 200, 83, 0.15);
+  border-radius: 3px;
+}
 .q-val-up { grid-area: up; }
 .q-val-down { grid-area: down; }
 .q-val-left { grid-area: left; }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { History, Play, Pause, SkipBack, SkipForward, X, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getEpisodeDetail } from '../services/api';
+import { playStepSound, playClickSound } from '../utils/sound';
 
 export default function EpisodeHistory({
   sessionId, currentEpisode, isTraining,
@@ -28,6 +29,7 @@ export default function EpisodeHistory({
       timerRef.current = setInterval(() => {
         onStepChange(prev => {
           if (prev >= max) { setIsPlaying(false); return max; }
+          playStepSound();
           return prev + 1;
         });
       }, speed);
@@ -199,10 +201,11 @@ export default function EpisodeHistory({
             {/* Playback controls */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => onStepChange(0)} type="button" className="btn btn-ghost btn-sm">
+                <button onClick={() => { playStepSound(); onStepChange(0); }} type="button" className="btn btn-ghost btn-sm">
                   <SkipBack size={13} />
                 </button>
                 <button onClick={() => {
+                  playClickSound();
                   if (replayStepIndex >= maxSteps) onStepChange(0);
                   setIsPlaying(p => !p);
                 }} type="button"
@@ -215,7 +218,7 @@ export default function EpisodeHistory({
                   {isPlaying ? <Pause size={13} fill="white" /> : <Play size={13} fill="white" />}
                   {isPlaying ? 'Pause' : 'Play Path'}
                 </button>
-                <button onClick={() => onStepChange(p => Math.min(maxSteps, p + 1))} type="button" className="btn btn-ghost btn-sm">
+                <button onClick={() => { playStepSound(); onStepChange(p => Math.min(maxSteps, p + 1)); }} type="button" className="btn btn-ghost btn-sm">
                   <SkipForward size={13} />
                 </button>
               </div>
