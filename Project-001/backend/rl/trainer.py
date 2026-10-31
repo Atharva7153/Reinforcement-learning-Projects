@@ -17,6 +17,9 @@ class TrainingSession:
         self.last_reward: float = 0.0
         self.cumulative_reward: float = 0.0
         self.episode_rewards: List[float] = []
+        self.episode_steps: List[int] = []
+        self.episode_td_errors: List[float] = []
+        self.visit_counts: Dict[str, int] = {}
         self.episode_history: Dict[int, Dict[str, Any]] = {}
 
         self._task: Optional[asyncio.Task] = None
@@ -48,6 +51,9 @@ class TrainingSession:
         self.last_reward = 0.0
         self.cumulative_reward = 0.0
         self.episode_rewards = []
+        self.episode_steps = []
+        self.episode_td_errors = []
+        self.visit_counts = {}
         self.episode_history = {}
         self._stop_requested = False
         self._pause_event.set()
@@ -78,6 +84,11 @@ class TrainingSession:
                 ep_reward = 0.0
                 step_count = 0
                 trajectory: List[Dict[str, Any]] = []
+                td_errors_in_episode: List[float] = []
+
+                # Track start state visit
+                st_key = f"{state[0]},{state[1]}"
+                self.visit_counts[st_key] = self.visit_counts.get(st_key, 0) + 1
 
                 # Send episode start
                 await broadcast_fn({
@@ -100,7 +111,12 @@ class TrainingSession:
 
                     action = self.agent.choose_action(state, greedy=False)
                     next_state, reward, done = self.env.step(state, action)
-                    self.agent.update(state, action, reward, next_state, done)
+                    _, td_err = self.agent.update(state, action, reward, next_state, done)
+                    td_errors_in_episode.append(td_err)
+
+                    # Track visit count
+                    nxt_key = f"{next_state[0]},{next_state[1]}"
+                    self.visit_counts[nxt_key] = self.visit_counts.get(nxt_key, 0) + 1
 
                     ep_reward += reward
                     self.last_reward = reward
@@ -116,7 +132,6 @@ class TrainingSession:
                     })
 
                     # Send step update if speed delay > 0 or at notable checkpoints
-                    # When delay_ms > 0, we delay so user can see every step
                     if self.speed_delay_ms > 0:
                         await broadcast_fn({
                             "type": "step",
@@ -137,6 +152,9 @@ class TrainingSession:
 
                 self.agent.decay_epsilon()
                 self.episode_rewards.append(round(ep_reward, 2))
+                self.episode_steps.append(step_count)
+                avg_td = round(sum(td_errors_in_episode) / len(td_errors_in_episode), 4) if td_errors_in_episode else 0.0
+                self.episode_td_errors.append(avg_td)
 
                 # Record episode history in temporary memory
                 last_pos = trajectory[-1]["next_state"] if trajectory else list(self.env.start)
@@ -145,6 +163,7 @@ class TrainingSession:
                     "steps": step_count,
                     "total_reward": round(ep_reward, 2),
                     "epsilon": round(self.agent.epsilon, 4),
+                    "avg_td_error": avg_td,
                     "reached_goal": bool(done and last_pos == list(self.env.goal)),
                     "path": [list(self.env.start)] + [s["next_state"] for s in trajectory],
                     "trajectory": trajectory
@@ -154,8 +173,6 @@ class TrainingSession:
                 recent = self.episode_rewards[-20:]
                 avg_recent = round(sum(recent) / len(recent), 2) if recent else 0.0
 
-                # Broadcast episode end
-                # Always send episode end for stats and charts
                 should_broadcast_q = (
                     self.current_episode <= 10 or 
                     self.current_episode % 5 == 0 or 
@@ -170,9 +187,12 @@ class TrainingSession:
                     "steps": step_count,
                     "episode_reward": round(ep_reward, 2),
                     "avg_reward": avg_recent,
+                    "avg_td_error": avg_td,
                     "epsilon": self.agent.epsilon,
                     "q_table": self.agent.get_q_table_serializable() if should_broadcast_q else None,
-                    "best_actions": self.agent.get_best_actions() if should_broadcast_q else None
+                    "best_actions": self.agent.get_best_actions() if should_broadcast_q else None,
+                    "state_values": self.agent.get_state_values() if should_broadcast_q else None,
+                    "visit_counts": self.visit_counts if should_broadcast_q else None
                 })
 
                 # Yield to event loop even when delay_ms == 0 to allow WebSocket ping/pongs & UI responsiveness
@@ -186,6 +206,8 @@ class TrainingSession:
                     "total_episodes": self.config.episodes,
                     "q_table": self.agent.get_q_table_serializable(),
                     "best_actions": self.agent.get_best_actions(),
+                    "state_values": self.agent.get_state_values(),
+                    "visit_counts": self.visit_counts,
                     "final_epsilon": self.agent.epsilon
                 })
         except asyncio.CancelledError:
@@ -202,7 +224,7 @@ class TrainingSession:
         state = self.env.reset()
         done = False
         steps = 0
-        max_demo_steps = max(50, self.config.rows * self.config.cols * 2)
+        max_demo_steps = max(80, self.config.rows * self.config.cols * 2)
 
         await broadcast_fn({
             "type": "policy_demo_start",
@@ -251,7 +273,8 @@ class TrainingSession:
                 "steps": ep["steps"],
                 "total_reward": ep["total_reward"],
                 "reached_goal": ep["reached_goal"],
-                "epsilon": ep["epsilon"]
+                "epsilon": ep["epsilon"],
+                "avg_td_error": ep.get("avg_td_error", 0.0)
             }
             for ep in self.episode_history.values()
         ]

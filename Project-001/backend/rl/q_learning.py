@@ -38,7 +38,8 @@ class QLearningAgent:
         reward: float,
         next_state: Tuple[int, int],
         done: bool
-    ) -> float:
+    ) -> Tuple[float, float]:
+        """Returns (new_q_value, td_error)"""
         if done:
             best_next = 0.0
         else:
@@ -46,9 +47,10 @@ class QLearningAgent:
 
         target = reward + (self.gamma * best_next)
         old_val = self.Q[state][action]
+        td_error = abs(target - old_val)
         new_val = old_val + (self.alpha * (target - old_val))
         self.Q[state][action] = round(new_val, 3)
-        return self.Q[state][action]
+        return self.Q[state][action], round(td_error, 4)
 
     def decay_epsilon(self) -> float:
         self.epsilon = max(self.epsilon_min, round(self.epsilon * self.epsilon_decay, 4))
@@ -71,3 +73,9 @@ class QLearningAgent:
                 best = max(actions_q, key=actions_q.get)
                 result[f"{r},{c}"] = best
         return result
+
+    def get_state_values(self) -> Dict[str, float]:
+        return {
+            f"{r},{c}": round(max(actions_q.values()), 3)
+            for (r, c), actions_q in self.Q.items()
+        }

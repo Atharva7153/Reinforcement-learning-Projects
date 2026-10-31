@@ -1,23 +1,26 @@
 import React from 'react';
-import { Bot, Flag, Ban, Eraser, Play, Pause, RotateCcw, Zap, Eye, ChevronRight } from 'lucide-react';
+import { Bot, Flag, Ban, Eraser, Play, Pause, RotateCcw, Zap, Flame, Waves, Snowflake, Orbit, Layers } from 'lucide-react';
 
 export default function ControlPanel({
   trainingStatus, activeTool, setActiveTool,
   onStart, onPause, onResume, onReset, onRunPolicy,
   delayMs, onSpeedChange,
   showQValues, setShowQValues, showPolicyArrows, setShowPolicyArrows,
+  showValueHeatmap, setShowValueHeatmap, showVisitHeatmap, setShowVisitHeatmap,
   isPolicyRunning, isStarting = false,
 }) {
   const isTraining = trainingStatus === 'training';
   const isPaused = trainingStatus === 'paused';
-  const isFinished = trainingStatus === 'finished';
-  const isIdle = trainingStatus === 'idle';
 
   const tools = [
-    { id: 'agent', label: 'Agent', icon: <Bot size={15} />, color: '#0066ff' },
-    { id: 'goal', label: 'Goal', icon: <Flag size={15} />, color: '#00c853' },
-    { id: 'wall', label: 'Wall', icon: <Ban size={15} />, color: '#ff1744' },
-    { id: 'erase', label: 'Erase', icon: <Eraser size={15} />, color: '#6b6b6b' },
+    { id: 'agent', label: 'Agent', icon: <Bot size={14} />, color: '#0066ff' },
+    { id: 'goal', label: 'Goal', icon: <Flag size={14} />, color: '#00c853' },
+    { id: 'wall', label: 'Wall', icon: <Ban size={14} />, color: '#ff1744' },
+    { id: 'cliff', label: 'Cliff', icon: <Flame size={14} />, color: '#e65100' },
+    { id: 'mud', label: 'Mud', icon: <Waves size={14} />, color: '#8d6e63' },
+    { id: 'ice', label: 'Ice', icon: <Snowflake size={14} />, color: '#00bcd4' },
+    { id: 'portal', label: 'Portal', icon: <Orbit size={14} />, color: '#ab47bc' },
+    { id: 'erase', label: 'Erase', icon: <Eraser size={14} />, color: '#6b6b6b' },
   ];
 
   return (
@@ -26,7 +29,7 @@ export default function ControlPanel({
       <div className="card-section">
         <div className="section-header">
           <span className="section-title">Editor Tools</span>
-          <span style={{ fontSize: 11, color: '#bbb', marginLeft: 'auto' }}>Click a cell after selecting</span>
+          <span style={{ fontSize: 11, color: '#bbb', marginLeft: 'auto' }}>Select tool & click grid</span>
         </div>
         <div className="grid grid-cols-4 gap-2">
           {tools.map(({ id, label, icon, color }) => (
@@ -36,7 +39,11 @@ export default function ControlPanel({
               disabled={isTraining}
               onClick={() => setActiveTool(id)}
               className={`tool-chip ${activeTool === id ? 'active' : ''}`}
-              style={activeTool !== id ? { '--hover-color': color } : {}}
+              style={{
+                padding: '7px 8px',
+                fontSize: 12,
+                justifyContent: 'center',
+              }}
             >
               {React.cloneElement(icon, {
                 color: activeTool === id ? 'white' : color,
@@ -56,7 +63,6 @@ export default function ControlPanel({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* Start / Pause / Resume */}
           {!isTraining && !isPaused && (
             <button className="btn btn-black flex-1" onClick={onStart} disabled={isStarting}>
               <Play size={15} fill="white" />
@@ -76,13 +82,11 @@ export default function ControlPanel({
             </button>
           )}
 
-          {/* Reset */}
-          <button className="btn btn-white" onClick={onReset} title="Reset">
+          <button className="btn btn-white" onClick={onReset} title="Reset training">
             <RotateCcw size={15} />
             Reset
           </button>
 
-          {/* Run Policy */}
           <button
             className="btn btn-white"
             onClick={onRunPolicy}
@@ -103,7 +107,7 @@ export default function ControlPanel({
         <div className="flex items-center justify-between mb-3">
           <span className="section-title">Simulation Speed</span>
           <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, color: '#0a0a0a' }}>
-            {delayMs === 0 ? 'Turbo' : `${delayMs}ms`}
+            {delayMs === 0 ? 'Turbo (0ms)' : `${delayMs}ms`}
           </span>
         </div>
         <input type="range" min={0} max={300} step={10} value={delayMs}
@@ -115,16 +119,41 @@ export default function ControlPanel({
 
       <div className="card-divider" />
 
-      {/* Overlays */}
+      {/* Overlays & Heatmaps */}
       <div className="card-section" style={{ padding: '14px 24px' }}>
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2.5 cursor-pointer select-none" style={{ fontSize: 13, fontWeight: 500 }}>
+        <div className="section-header" style={{ marginBottom: 10 }}>
+          <span className="section-title">Visual Overlays</span>
+        </div>
+        <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-neutral-700">
             <input type="checkbox" checked={showQValues} onChange={e => setShowQValues(e.target.checked)} />
-            Show Q-Values
+            Q-Values
           </label>
-          <label className="flex items-center gap-2.5 cursor-pointer select-none" style={{ fontSize: 13, fontWeight: 500 }}>
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-neutral-700">
             <input type="checkbox" checked={showPolicyArrows} onChange={e => setShowPolicyArrows(e.target.checked)} />
             Policy Arrows
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-neutral-700">
+            <input
+              type="checkbox"
+              checked={showValueHeatmap}
+              onChange={e => {
+                setShowValueHeatmap(e.target.checked);
+                if (e.target.checked) setShowVisitHeatmap(false);
+              }}
+            />
+            State Value (V)
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-neutral-700">
+            <input
+              type="checkbox"
+              checked={showVisitHeatmap}
+              onChange={e => {
+                setShowVisitHeatmap(e.target.checked);
+                if (e.target.checked) setShowValueHeatmap(false);
+              }}
+            />
+            Visit Heatmap
           </label>
         </div>
       </div>

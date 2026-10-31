@@ -6,6 +6,7 @@ export default function EpisodeHistory({
   sessionId, currentEpisode, isTraining,
   onStartReplay, onStopReplay,
   isReplayMode, replayStepIndex, onStepChange,
+  externalTargetEpisode = null,
 }) {
   const [targetEpisode, setTargetEpisode] = useState('');
   const [epData, setEpData] = useState(null);
@@ -13,6 +14,13 @@ export default function EpisodeHistory({
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(200);
   const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (externalTargetEpisode && externalTargetEpisode >= 1 && externalTargetEpisode !== Number(targetEpisode)) {
+      setTargetEpisode(String(externalTargetEpisode));
+      loadEpisode(externalTargetEpisode);
+    }
+  }, [externalTargetEpisode]);
 
   useEffect(() => {
     if (isPlaying && epData?.path) {

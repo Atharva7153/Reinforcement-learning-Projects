@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Cpu, Wifi, WifiOff, AlertCircle } from 'lucide-react';
+import { Cpu, Wifi, AlertCircle } from 'lucide-react';
 import GridEnvironment from './components/GridEnvironment';
 import ControlPanel from './components/ControlPanel';
 import TrainingStats from './components/TrainingStats';
@@ -17,11 +17,16 @@ import {
 const DEFAULT_CONFIG = {
   rows: 4, cols: 4,
   start: [0, 0], goal: [3, 3],
-  obstacles: [[1, 1], [1, 2], [2, 1]],
+  obstacles: [[1, 1], [1, 2]],
+  cliffs: [[2, 1]],
+  mud: [[2, 2]],
+  ice: [[0, 2]],
+  portals: [],
   goal_reward: 100, step_penalty: -1, wall_penalty: -5,
+  cliff_penalty: -50, mud_penalty: -5, slippery_prob: 0.3,
   alpha: 0.1, gamma: 0.9,
   epsilon: 0.2, epsilon_decay: 0.995, epsilon_min: 0.01,
-  episodes: 500, max_steps: 100, delay_ms: 30,
+  episodes: 500, max_steps: 150, delay_ms: 30,
 };
 
 export default function App() {
@@ -35,12 +40,16 @@ export default function App() {
   const [epsilon, setEpsilon] = useState(DEFAULT_CONFIG.epsilon);
   const [qTable, setQTable] = useState(null);
   const [bestActions, setBestActions] = useState(null);
+  const [stateValues, setStateValues] = useState({});
+  const [visitCounts, setVisitCounts] = useState({});
   const [agentPosition, setAgentPosition] = useState(DEFAULT_CONFIG.start);
   const [selectedCell, setSelectedCell] = useState(null);
   const [history, setHistory] = useState([]);
   const [activeTool, setActiveTool] = useState('wall');
   const [showQValues, setShowQValues] = useState(true);
   const [showPolicyArrows, setShowPolicyArrows] = useState(true);
+  const [showValueHeatmap, setShowValueHeatmap] = useState(false);
+  const [showVisitHeatmap, setShowVisitHeatmap] = useState(false);
   const [delayMs, setDelayMs] = useState(30);
   const [isPolicyRunning, setIsPolicyRunning] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -51,6 +60,7 @@ export default function App() {
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [replayPath, setReplayPath] = useState([]);
   const [replayStepIndex, setReplayStepIndex] = useState(0);
+  const [selectedReplayEpisode, setSelectedReplayEpisode] = useState(null);
 
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -62,6 +72,8 @@ export default function App() {
         setEpsilon(msg.epsilon ?? DEFAULT_CONFIG.epsilon);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        if (msg.state_values) setStateValues(msg.state_values);
+        if (msg.visit_counts) setVisitCounts(msg.visit_counts);
         break;
       case 'episode_start':
         setCurrentEpisode(msg.episode);
@@ -81,12 +93,25 @@ export default function App() {
         setEpsilon(msg.epsilon);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
-        setHistory(prev => [...prev.slice(-100), { episode: msg.episode, reward: msg.episode_reward, avgReward: msg.avg_reward }]);
+        if (msg.state_values) setStateValues(msg.state_values);
+        if (msg.visit_counts) setVisitCounts(msg.visit_counts);
+        setHistory((prev) => [
+          ...prev.slice(-150),
+          {
+            episode: msg.episode,
+            reward: msg.episode_reward,
+            avgReward: msg.avg_reward,
+            steps: msg.steps,
+            avg_td_error: msg.avg_td_error ?? 0,
+          },
+        ]);
         break;
       case 'training_finished':
         setTrainingStatus('finished');
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        if (msg.state_values) setStateValues(msg.state_values);
+        if (msg.visit_counts) setVisitCounts(msg.visit_counts);
         setEpsilon(msg.final_epsilon);
         break;
       case 'reset_ack':
@@ -110,7 +135,8 @@ export default function App() {
       case 'policy_demo_finished':
         setIsPolicyRunning(false);
         break;
-      default: break;
+      default:
+        break;
     }
   }, []);
 
@@ -124,7 +150,6 @@ export default function App() {
       () => setConnected(false),
       () => {
         setConnected(false);
-        // Attempt reconnect if still in this session
         reconnectTimeoutRef.current = setTimeout(() => {
           if (sessionId === sid) {
             setupWebSocket(sid);
@@ -158,12 +183,14 @@ export default function App() {
       setAgentPosition(cfg.start);
       setSelectedCell(null);
       setHistory([]);
+      setStateValues({});
+      setVisitCounts({});
 
       setupWebSocket(data.session_id);
       return data.session_id;
     } catch (err) {
-      console.error("Init session error:", err);
-      setErrorMessage("Connecting to backend... If this is the first load, Render may take 20s to wake up.");
+      console.error('Init session error:', err);
+      setErrorMessage('Connecting to backend... If this is the first load, Render may take 20s to wake up.');
       return null;
     }
   };
@@ -176,7 +203,7 @@ export default function App() {
     };
   }, []);
 
-  // Background polling sync when training is active (bulletproof fallback if WS lags)
+  // Background polling sync fallback
   useEffect(() => {
     if (trainingStatus !== 'training' || !sessionId) return;
 
@@ -192,6 +219,8 @@ export default function App() {
           const qData = await getQTable(sessionId);
           setQTable(qData.q_table);
           setBestActions(qData.best_actions);
+          if (qData.state_values) setStateValues(qData.state_values);
+          if (qData.visit_counts) setVisitCounts(qData.visit_counts);
         }
       } catch (e) {
         // ignore polling error
@@ -201,28 +230,91 @@ export default function App() {
     return () => clearInterval(interval);
   }, [trainingStatus, sessionId]);
 
-  // Cell editor
+  // Comprehensive cell editor for all tile types
   const handleCellClick = (r, c) => {
     setSelectedCell([r, c]);
     if (trainingStatus === 'training' || isReplayMode) return;
 
+    const isMatch = (arr) => arr.some(([ar, ac]) => ar === r && ac === c);
+    const filterOut = (arr) => arr.filter(([ar, ac]) => !(ar === r && ac === c));
+
+    // Base cleanup: remove cell from all tile arrays
+    const cleanConfig = {
+      ...config,
+      obstacles: filterOut(config.obstacles || []),
+      cliffs: filterOut(config.cliffs || []),
+      mud: filterOut(config.mud || []),
+      ice: filterOut(config.ice || []),
+      portals: (config.portals || []).filter(([r1, c1, r2, c2]) => !(r1 === r && c1 === c) && !(r2 === r && c2 === c)),
+    };
+
     if (activeTool === 'agent') {
       if (config.goal[0] === r && config.goal[1] === c) return;
-      const nc = { ...config, start: [r, c], obstacles: config.obstacles.filter(([or, oc]) => !(or === r && oc === c)) };
-      setConfig(nc); setAgentPosition([r, c]); initSession(nc);
+      const nc = { ...cleanConfig, start: [r, c] };
+      setConfig(nc);
+      setAgentPosition([r, c]);
+      initSession(nc);
     } else if (activeTool === 'goal') {
       if (config.start[0] === r && config.start[1] === c) return;
-      const nc = { ...config, goal: [r, c], obstacles: config.obstacles.filter(([or, oc]) => !(or === r && oc === c)) };
-      setConfig(nc); initSession(nc);
+      const nc = { ...cleanConfig, goal: [r, c] };
+      setConfig(nc);
+      initSession(nc);
     } else if (activeTool === 'wall') {
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
-      const exists = config.obstacles.some(([or, oc]) => or === r && oc === c);
-      const obs = exists ? config.obstacles.filter(([or, oc]) => !(or === r && oc === c)) : [...config.obstacles, [r, c]];
-      const nc = { ...config, obstacles: obs };
-      setConfig(nc); initSession(nc);
+      const exists = isMatch(config.obstacles || []);
+      const updated = exists ? filterOut(config.obstacles) : [...filterOut(config.obstacles), [r, c]];
+      const nc = { ...cleanConfig, obstacles: updated };
+      setConfig(nc);
+      initSession(nc);
+    } else if (activeTool === 'cliff') {
+      if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      const exists = isMatch(config.cliffs || []);
+      const updated = exists ? filterOut(config.cliffs) : [...filterOut(config.cliffs), [r, c]];
+      const nc = { ...cleanConfig, cliffs: updated };
+      setConfig(nc);
+      initSession(nc);
+    } else if (activeTool === 'mud') {
+      if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      const exists = isMatch(config.mud || []);
+      const updated = exists ? filterOut(config.mud) : [...filterOut(config.mud), [r, c]];
+      const nc = { ...cleanConfig, mud: updated };
+      setConfig(nc);
+      initSession(nc);
+    } else if (activeTool === 'ice') {
+      if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      const exists = isMatch(config.ice || []);
+      const updated = exists ? filterOut(config.ice) : [...filterOut(config.ice), [r, c]];
+      const nc = { ...cleanConfig, ice: updated };
+      setConfig(nc);
+      initSession(nc);
+    } else if (activeTool === 'portal') {
+      if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      let existingPortals = [...(config.portals || [])];
+      let flat = [];
+      existingPortals.forEach(([r1, c1, r2, c2]) => {
+        flat.push([r1, c1]);
+        flat.push([r2, c2]);
+      });
+
+      if (flat.some(([pr, pc]) => pr === r && pc === c)) {
+        // Remove from portal
+        flat = flat.filter(([pr, pc]) => !(pr === r && pc === c));
+      } else {
+        flat.push([r, c]);
+      }
+
+      // Re-pair flat portals into [r1, c1, r2, c2]
+      const paired = [];
+      for (let i = 0; i + 1 < flat.length; i += 2) {
+        paired.push([flat[i][0], flat[i][1], flat[i + 1][0], flat[i + 1][1]]);
+      }
+
+      const nc = { ...cleanConfig, portals: paired };
+      setConfig(nc);
+      initSession(nc);
     } else if (activeTool === 'erase') {
-      const nc = { ...config, obstacles: config.obstacles.filter(([or, oc]) => !(or === r && oc === c)) };
-      setConfig(nc); initSession(nc);
+      setConfig(cleanConfig);
+      initSession(cleanConfig);
     }
   };
 
@@ -235,26 +327,22 @@ export default function App() {
       let activeSid = sessionId;
       if (!activeSid) {
         activeSid = await initSession(config);
-        if (!activeSid) {
-          throw new Error("Could not initialize session with backend. Please check server status.");
-        }
+        if (!activeSid) throw new Error('Could not initialize session with backend.');
       }
 
       await startTraining(activeSid);
       setTrainingStatus('training');
 
-      // Also trigger via WebSocket if open
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "start" }));
+        wsRef.current.send(JSON.stringify({ action: 'start' }));
       }
     } catch (err) {
-      console.error("Failed to start training:", err);
-      // Fallback: try starting directly via websocket
+      console.error('Failed to start training:', err);
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "start" }));
+        wsRef.current.send(JSON.stringify({ action: 'start' }));
         setTrainingStatus('training');
       } else {
-        setErrorMessage(err.response?.data?.detail || err.message || "Failed to start training");
+        setErrorMessage(err.response?.data?.detail || err.message || 'Failed to start training');
       }
     } finally {
       setIsStarting(false);
@@ -265,7 +353,7 @@ export default function App() {
     try {
       if (sessionId) await pauseTraining(sessionId);
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "pause" }));
+        wsRef.current.send(JSON.stringify({ action: 'pause' }));
       }
       setTrainingStatus('paused');
     } catch (err) {
@@ -277,7 +365,7 @@ export default function App() {
     try {
       if (sessionId) await resumeTraining(sessionId);
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "resume" }));
+        wsRef.current.send(JSON.stringify({ action: 'resume' }));
       }
       setTrainingStatus('training');
     } catch (err) {
@@ -289,7 +377,7 @@ export default function App() {
     try {
       if (sessionId) await resetTraining(sessionId);
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "reset" }));
+        wsRef.current.send(JSON.stringify({ action: 'reset' }));
       }
       setTrainingStatus('idle');
       setCurrentEpisode(0);
@@ -298,6 +386,8 @@ export default function App() {
       setAvgReward(0);
       setAgentPosition(config.start);
       setHistory([]);
+      setStateValues({});
+      setVisitCounts({});
       setIsReplayMode(false);
     } catch (err) {
       console.error(err);
@@ -313,7 +403,7 @@ export default function App() {
         console.error(err);
       }
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "set_speed", delay_ms: ms }));
+        wsRef.current.send(JSON.stringify({ action: 'set_speed', delay_ms: ms }));
       }
     }
   };
@@ -323,25 +413,94 @@ export default function App() {
     setIsReplayMode(false);
     setIsPolicyRunning(true);
     try {
-      await runPolicyDemo(sessionId, 220);
+      await runPolicyDemo(sessionId, 200);
     } catch (err) {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "run_demo", speed_ms: 220 }));
+        wsRef.current.send(JSON.stringify({ action: 'run_demo', speed_ms: 200 }));
       } else {
         setIsPolicyRunning(false);
       }
     }
   };
 
+  // Rich Presets: from 3x3 to 20x20
   const handlePreset = (type) => {
-    const presets = {
-      classic: { ...DEFAULT_CONFIG, rows: 3, cols: 3, start: [0,0], goal: [2,2], obstacles: [[1,0]], episodes: 300, max_steps: 50 },
-      maze: { ...DEFAULT_CONFIG, rows: 5, cols: 5, start: [0,0], goal: [4,4], obstacles: [[0,2],[1,2],[2,2],[3,2],[3,4],[2,4]], episodes: 600, max_steps: 100 },
-      complex: { ...DEFAULT_CONFIG, rows: 6, cols: 6, start: [0,0], goal: [5,5], obstacles: [[1,1],[1,2],[1,3],[3,2],[3,3],[3,4],[4,1],[4,2]], episodes: 1000, max_steps: 120 },
-    };
-    const nc = presets[type] || DEFAULT_CONFIG;
-    setConfig(nc);
-    initSession(nc);
+    let preset;
+    if (type === 'classic') {
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 3, cols: 3,
+        start: [0, 0], goal: [2, 2],
+        obstacles: [[1, 0]],
+        cliffs: [], mud: [], ice: [], portals: [],
+        episodes: 300, max_steps: 50,
+      };
+    } else if (type === 'cliff') {
+      // Sutton & Barto Classic Cliff Walking
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 6, cols: 6,
+        start: [5, 0], goal: [5, 5],
+        obstacles: [],
+        cliffs: [[5, 1], [5, 2], [5, 3], [5, 4]],
+        mud: [[3, 2], [3, 3]],
+        ice: [], portals: [],
+        episodes: 600, max_steps: 120,
+      };
+    } else if (type === 'hazard') {
+      // 8x8 Hazard Course with mud, ice, and cliffs
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 8, cols: 8,
+        start: [0, 0], goal: [7, 7],
+        obstacles: [[2, 2], [2, 3], [2, 4], [5, 4], [5, 5]],
+        cliffs: [[6, 1], [6, 2], [6, 3]],
+        mud: [[3, 5], [4, 5], [4, 6]],
+        ice: [[1, 4], [1, 5], [1, 6]],
+        portals: [[1, 1, 6, 6]],
+        episodes: 800, max_steps: 200,
+      };
+    } else if (type === 'maze') {
+      // 12x12 Labyrinth with teleporters
+      const walls = [];
+      for (let i = 0; i < 10; i++) walls.push([3, i]);
+      for (let i = 2; i < 12; i++) walls.push([7, i]);
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 12, cols: 12,
+        start: [0, 0], goal: [11, 11],
+        obstacles: walls,
+        cliffs: [[4, 4], [4, 5], [8, 8]],
+        mud: [[1, 8], [2, 8]],
+        ice: [[5, 2], [5, 3], [6, 2]],
+        portals: [[2, 2, 9, 9]],
+        episodes: 1200, max_steps: 300,
+      };
+    } else if (type === 'mega') {
+      // 20x20 Mega Grid World
+      const obs = [];
+      for (let r = 2; r < 18; r += 4) {
+        for (let c = 2; c < 18; c += 2) {
+          obs.push([r, c]);
+        }
+      }
+      preset = {
+        ...DEFAULT_CONFIG,
+        rows: 20, cols: 20,
+        start: [0, 0], goal: [19, 19],
+        obstacles: obs,
+        cliffs: [[10, 5], [10, 6], [10, 7], [10, 8]],
+        mud: [[15, 10], [15, 11], [16, 10], [16, 11]],
+        ice: [[4, 12], [4, 13], [5, 12], [5, 13]],
+        portals: [[3, 3, 17, 17]],
+        episodes: 2000, max_steps: 500, delay_ms: 0,
+      };
+    }
+
+    if (preset) {
+      setConfig(preset);
+      initSession(preset);
+    }
   };
 
   const handleStartReplay = (path, trajectory) => {
@@ -355,31 +514,60 @@ export default function App() {
     setIsReplayMode(false);
     setReplayPath([]);
     setReplayStepIndex(0);
+    setSelectedReplayEpisode(null);
     setAgentPosition(config.start);
   };
 
   const handleReplayStep = (valOrFn) => {
-    setReplayStepIndex(prev => {
+    setReplayStepIndex((prev) => {
       const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
       if (replayPath?.[next]) setAgentPosition(replayPath[next]);
       return next;
     });
   };
 
+  // Convert portal pairs [[r1, c1, r2, c2]] into flat list of coords for visual rendering
+  const flatPortalCoords = [];
+  (config.portals || []).forEach(([r1, c1, r2, c2]) => {
+    flatPortalCoords.push([r1, c1]);
+    flatPortalCoords.push([r2, c2]);
+  });
+
   return (
     <div style={{ minHeight: '100vh', background: '#f7f7f5', fontFamily: 'Inter, sans-serif' }}>
       {/* NAV BAR */}
-      <header style={{
-        background: 'white',
-        borderBottom: '1.5px solid #e5e5e5',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 32px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header
+        style={{
+          background: 'white',
+          borderBottom: '1.5px solid #e5e5e5',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1440,
+            margin: '0 auto',
+            padding: '0 32px',
+            height: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: '#0a0a0a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Cpu size={18} color="white" />
             </div>
             <div>
@@ -387,33 +575,46 @@ export default function App() {
                 RL Playground
               </h1>
               <p style={{ fontSize: 11, color: '#bbb', fontFamily: 'JetBrains Mono', fontWeight: 500, letterSpacing: '0.04em', marginTop: 1 }}>
-                Q-Learning · GridWorld Visualizer
+                Q-Learning · Stochastic Tiles · Multi-Graph Analytics
               </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Connection status */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '6px 14px', borderRadius: 100,
-              background: connected ? '#edfff5' : '#fff0f0',
-              border: `1.5px solid ${connected ? '#b3f0cf' : '#ffc0c0'}`,
-              fontSize: 12, fontWeight: 700,
-              color: connected ? '#00843d' : '#cc0000',
-            }}>
-              {connected
-                ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00c853', boxShadow: '0 0 6px rgba(0,200,83,0.6)' }} />
-                : <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ff1744' }} />
-              }
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '6px 14px',
+                borderRadius: 100,
+                background: connected ? '#edfff5' : '#fff0f0',
+                border: `1.5px solid ${connected ? '#b3f0cf' : '#ffc0c0'}`,
+                fontSize: 12,
+                fontWeight: 700,
+                color: connected ? '#00843d' : '#cc0000',
+              }}
+            >
+              {connected ? (
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00c853', boxShadow: '0 0 6px rgba(0,200,83,0.6)' }} />
+              ) : (
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ff1744' }} />
+              )}
               {connected ? 'Backend Live' : 'Connecting...'}
             </div>
 
             {sessionId && (
-              <div style={{
-                padding: '6px 14px', borderRadius: 100, border: '1.5px solid #e5e5e5',
-                fontSize: 12, fontFamily: 'JetBrains Mono', fontWeight: 600, color: '#6b6b6b',
-              }}>
+              <div
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 100,
+                  border: '1.5px solid #e5e5e5',
+                  fontSize: 12,
+                  fontFamily: 'JetBrains Mono',
+                  fontWeight: 600,
+                  color: '#6b6b6b',
+                }}
+              >
                 session: <span style={{ color: '#0a0a0a', fontWeight: 700 }}>{sessionId}</span>
               </div>
             )}
@@ -421,14 +622,23 @@ export default function App() {
         </div>
       </header>
 
-      {/* Error alert banner if any */}
+      {/* Error alert banner */}
       {errorMessage && (
-        <div style={{ maxWidth: 1400, margin: '16px auto 0', padding: '0 32px' }}>
-          <div style={{
-            background: '#fff0f0', border: '1.5px solid #ffc0c0', borderRadius: 12,
-            padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            color: '#cc0000', fontSize: 13, fontWeight: 600
-          }}>
+        <div style={{ maxWidth: 1440, margin: '16px auto 0', padding: '0 32px' }}>
+          <div
+            style={{
+              background: '#fff0f0',
+              border: '1.5px solid #ffc0c0',
+              borderRadius: 12,
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: '#cc0000',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <AlertCircle size={16} />
               <span>{errorMessage}</span>
@@ -436,8 +646,14 @@ export default function App() {
             <button
               onClick={() => initSession(config)}
               style={{
-                background: '#cc0000', color: 'white', border: 'none', borderRadius: 6,
-                padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                background: '#cc0000',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
               }}
             >
               Retry
@@ -446,12 +662,20 @@ export default function App() {
         </div>
       )}
 
-      {/* MAIN LAYOUT */}
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '28px 32px', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 24, alignItems: 'start' }}>
-
-        {/* LEFT: Grid + Stats + Charts */}
+      {/* MAIN WORKSPACE */}
+      <div
+        style={{
+          maxWidth: 1440,
+          margin: '0 auto',
+          padding: '28px 32px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 420px',
+          gap: 24,
+          alignItems: 'start',
+        }}
+      >
+        {/* LEFT COLUMN: Stats + Grid + Interactive Analytics + Replayer */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
           {/* Training Stats */}
           <TrainingStats
             trainingStatus={trainingStatus}
@@ -468,33 +692,48 @@ export default function App() {
             <div className="card-section" style={{ borderBottom: '1.5px solid #e5e5e5', paddingBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: trainingStatus === 'training' ? '#00c853' : '#e5e5e5',
-                    boxShadow: trainingStatus === 'training' ? '0 0 8px rgba(0,200,83,0.7)' : undefined,
-                  }} />
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: trainingStatus === 'training' ? '#00c853' : '#e5e5e5',
+                      boxShadow: trainingStatus === 'training' ? '0 0 8px rgba(0,200,83,0.7)' : undefined,
+                    }}
+                  />
                   <span style={{ fontSize: 13, fontWeight: 800, color: '#0a0a0a', letterSpacing: '-0.02em' }}>
-                    GridWorld {config.rows}×{config.cols}
+                    GridWorld {config.rows}×{config.cols} ({config.rows * config.cols} States)
                   </span>
                 </div>
-                <span style={{ fontSize: 12, color: '#bbb', fontWeight: 500 }}>
-                  {isReplayMode ? 'Replay mode' : `Tool: ${activeTool}`}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#bbb', fontWeight: 500 }}>
+                  <span>Tool: <strong className="text-neutral-800 uppercase">{activeTool}</strong></span>
+                </div>
               </div>
             </div>
 
-            <div className="card-section" style={{ display: 'flex', justifyContent: 'center', padding: '28px 24px' }}>
+            <div className="card-section" style={{ display: 'flex', justifyContent: 'center', padding: '24px 20px', overflowX: 'auto' }}>
               <GridEnvironment
-                rows={config.rows} cols={config.cols}
-                start={config.start} goal={config.goal}
-                obstacles={config.obstacles}
+                rows={config.rows}
+                cols={config.cols}
+                start={config.start}
+                goal={config.goal}
+                obstacles={config.obstacles || []}
+                cliffs={config.cliffs || []}
+                mud={config.mud || []}
+                ice={config.ice || []}
+                portals={flatPortalCoords}
                 agentPosition={agentPosition}
-                qTable={qTable} bestActions={bestActions}
+                qTable={qTable}
+                bestActions={bestActions}
+                stateValues={stateValues}
+                visitCounts={visitCounts}
                 activeTool={activeTool}
                 onCellClick={handleCellClick}
                 selectedCell={selectedCell}
                 showQValues={showQValues}
                 showPolicyArrows={showPolicyArrows}
+                showValueHeatmap={showValueHeatmap}
+                showVisitHeatmap={showVisitHeatmap}
                 isTraining={trainingStatus === 'training'}
                 replayPath={replayPath}
                 replayStepIndex={replayStepIndex}
@@ -503,7 +742,13 @@ export default function App() {
             </div>
           </div>
 
-          {/* Episode History */}
+          {/* Multi-Graph Interactive Analytics */}
+          <LearningCurve
+            history={history}
+            onSelectEpisode={(ep) => setSelectedReplayEpisode(ep)}
+          />
+
+          {/* Episode History & Replayer */}
           <EpisodeHistory
             sessionId={sessionId}
             currentEpisode={currentEpisode}
@@ -513,13 +758,11 @@ export default function App() {
             isReplayMode={isReplayMode}
             replayStepIndex={replayStepIndex}
             onStepChange={handleReplayStep}
+            externalTargetEpisode={selectedReplayEpisode}
           />
-
-          {/* Learning Curve */}
-          <LearningCurve history={history} />
         </div>
 
-        {/* RIGHT: Controls + Inspector + Config */}
+        {/* RIGHT COLUMN: Controls + Inspector + Configuration */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 80 }}>
           <ControlPanel
             trainingStatus={trainingStatus}
@@ -536,6 +779,10 @@ export default function App() {
             setShowQValues={setShowQValues}
             showPolicyArrows={showPolicyArrows}
             setShowPolicyArrows={setShowPolicyArrows}
+            showValueHeatmap={showValueHeatmap}
+            setShowValueHeatmap={setShowValueHeatmap}
+            showVisitHeatmap={showVisitHeatmap}
+            setShowVisitHeatmap={setShowVisitHeatmap}
             isPolicyRunning={isPolicyRunning}
             isStarting={isStarting}
           />
@@ -546,7 +793,13 @@ export default function App() {
             bestActions={bestActions}
             start={config.start}
             goal={config.goal}
-            obstacles={config.obstacles}
+            obstacles={config.obstacles || []}
+            cliffs={config.cliffs || []}
+            mud={config.mud || []}
+            ice={config.ice || []}
+            portals={flatPortalCoords}
+            stateValues={stateValues}
+            visitCounts={visitCounts}
           />
 
           <ConfigPanel
@@ -559,14 +812,14 @@ export default function App() {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* FOOTER */}
       <footer style={{ borderTop: '1.5px solid #e5e5e5', background: 'white', padding: '16px 32px', marginTop: 32 }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#bbb', fontFamily: 'JetBrains Mono' }}>
-            Q-Learning · Temporal Difference · FastAPI + React
+            Q-Learning · Stochastic MDPs · Dynamic GridWorld (Up to 20×20)
           </span>
           <span style={{ fontSize: 12, color: '#bbb' }}>
-            RL Playground — Atharva Sharna
+            RL Playground
           </span>
         </div>
       </footer>

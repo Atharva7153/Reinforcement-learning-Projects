@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Eye } from 'lucide-react';
 
 const ACTIONS = [
   { key: 'up', label: 'Up', Icon: ArrowUp },
@@ -8,7 +8,11 @@ const ACTIONS = [
   { key: 'right', label: 'Right', Icon: ArrowRight },
 ];
 
-export default function CellInspector({ selectedCell, qTable, bestActions, start, goal, obstacles }) {
+export default function CellInspector({
+  selectedCell, qTable, bestActions, start, goal,
+  obstacles = [], cliffs = [], mud = [], ice = [], portals = [],
+  stateValues = {}, visitCounts = {}
+}) {
   if (!selectedCell) {
     return (
       <div className="card">
@@ -25,13 +29,24 @@ export default function CellInspector({ selectedCell, qTable, bestActions, start
   const cq = qTable?.[key];
   const ba = bestActions?.[key];
   const isObs = obstacles.some(([or, oc]) => or === r && oc === c);
+  const isCliff = cliffs.some(([cr, cc]) => cr === r && cc === c);
+  const isMud = mud.some(([mr, mc]) => mr === r && mc === c);
+  const isIce = ice.some(([ir, ic]) => ir === r && ic === c);
+  const isPortal = portals.some(([pr, pc]) => pr === r && pc === c);
   const isGoal = goal[0] === r && goal[1] === c;
   const isStart = start[0] === r && start[1] === c;
 
+  const stateVal = stateValues?.[key] ?? (cq ? Math.max(...Object.values(cq)) : 0);
+  const visits = visitCounts?.[key] ?? 0;
+
   let typeLabel = 'Empty State';
   let typePill = 'pill-black';
-  if (isGoal) { typeLabel = 'Goal'; typePill = 'pill-green'; }
-  else if (isObs) { typeLabel = 'Obstacle'; typePill = 'pill-red'; }
+  if (isGoal) { typeLabel = 'Goal (+100)'; typePill = 'pill-green'; }
+  else if (isObs) { typeLabel = 'Wall'; typePill = 'pill-red'; }
+  else if (isCliff) { typeLabel = 'Cliff / Lava (-50)'; typePill = 'pill-orange'; }
+  else if (isMud) { typeLabel = 'Mud Swamp (-5)'; typePill = 'pill-brown'; }
+  else if (isIce) { typeLabel = 'Ice (Slippery)'; typePill = 'pill-cyan'; }
+  else if (isPortal) { typeLabel = 'Wormhole Portal'; typePill = 'pill-purple'; }
   else if (isStart) { typeLabel = 'Agent Start'; typePill = 'pill-blue'; }
 
   return (
@@ -51,7 +66,7 @@ export default function CellInspector({ selectedCell, qTable, bestActions, start
       <div className="card-section">
         {isObs ? (
           <p style={{ fontSize: 13, color: '#888', textAlign: 'center', padding: '8px 0' }}>
-            Obstacle — Q-values not tracked
+            Obstacle wall — Impassable state
           </p>
         ) : (
           <div>
@@ -62,19 +77,19 @@ export default function CellInspector({ selectedCell, qTable, bestActions, start
                 return (
                   <div key={a} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '10px 14px', borderRadius: 10,
+                    padding: '9px 12px', borderRadius: 9,
                     background: isBest ? '#edfff5' : '#f7f7f5',
                     border: `1.5px solid ${isBest ? '#00c853' : '#e5e5e5'}`,
                     transition: 'all 0.15s ease',
                   }}>
-                    <div className="flex items-center gap-2">
-                      <Icon size={14} color={isBest ? '#00843d' : '#9b9b9b'} strokeWidth={2.5} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: isBest ? '#00843d' : '#6b6b6b' }}>
+                    <div className="flex items-center gap-1.5">
+                      <Icon size={13} color={isBest ? '#00843d' : '#9b9b9b'} strokeWidth={2.5} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: isBest ? '#00843d' : '#6b6b6b' }}>
                         {label}
                       </span>
                     </div>
                     <span style={{
-                      fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 700,
+                      fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700,
                       color: isBest ? '#00843d' : val > 0 ? '#0066ff' : val < 0 ? '#cc0000' : '#bbb',
                     }}>
                       {Number(val).toFixed(2)}
@@ -84,11 +99,13 @@ export default function CellInspector({ selectedCell, qTable, bestActions, start
               })}
             </div>
 
-            {ba && (
-              <div style={{ marginTop: 12, fontSize: 12, color: '#6b6b6b', textAlign: 'right' }}>
-                Optimal policy: <span style={{ fontWeight: 700, color: '#ff6d00', textTransform: 'uppercase' }}>{ba}</span>
-              </div>
-            )}
+            <div className="flex items-center justify-between mt-3 pt-2 border-t border-neutral-100 text-xs font-mono text-neutral-500">
+              <span>V(s): <strong className="text-neutral-900">{Number(stateVal).toFixed(2)}</strong></span>
+              <span>Visits: <strong className="text-neutral-900">{visits}</strong></span>
+              {ba && (
+                <span>Best: <strong className="text-orange-600 uppercase">{ba}</strong></span>
+              )}
+            </div>
           </div>
         )}
       </div>

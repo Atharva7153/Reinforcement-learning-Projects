@@ -121,7 +121,9 @@ async def get_q_table(session_id: str):
     return QTableResponse(
         session_id=session.session_id,
         q_table=session.agent.get_q_table_serializable(),
-        best_actions=session.agent.get_best_actions()
+        best_actions=session.agent.get_best_actions(),
+        state_values=session.agent.get_state_values(),
+        visit_counts=session.visit_counts
     )
 
 @app.get("/training/{session_id}/episodes")
@@ -161,6 +163,8 @@ async def websocket_training(websocket: WebSocket, session_id: str):
         "epsilon": session.agent.epsilon,
         "q_table": session.agent.get_q_table_serializable(),
         "best_actions": session.agent.get_best_actions(),
+        "state_values": session.agent.get_state_values(),
+        "visit_counts": session.visit_counts,
         "episode_rewards": session.episode_rewards[-50:]
     })
 
