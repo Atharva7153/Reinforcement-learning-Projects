@@ -1,6 +1,9 @@
 import json
+import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -13,7 +16,7 @@ from models.schemas import (
 )
 from sessions.manager import session_manager
 
-app = FastAPI(title="RL Playground API", version="1.0.0")
+app = FastAPI(title="RL Playground API", version="1.0.0", docs_url="/api/docs", redoc_url="/api/redoc")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,9 +32,11 @@ class SpeedUpdate(BaseModel):
 class DemoRequest(BaseModel):
     speed_ms: Optional[int] = 250
 
-@app.get("/")
-def read_root():
-    return {"message": "RL Playground API is running", "version": "1.0.0"}
+# ── API Routes ────────────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "version": "1.0.0"}
 
 @app.post("/environment/create", response_model=CreateEnvironmentResponse)
 def create_environment(config: EnvironmentConfig):
@@ -124,10 +129,7 @@ def get_episodes(session_id: str):
     session = session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {
-        "session_id": session_id,
-        "episodes": session.get_episodes_summary()
-    }
+    return {"session_id": session_id, "episodes": session.get_episodes_summary()}
 
 @app.get("/training/{session_id}/episode/{episode_num}")
 def get_episode_detail(session_id: str, episode_num: int):
@@ -149,7 +151,6 @@ async def websocket_training(websocket: WebSocket, session_id: str):
     await websocket.accept()
     await session_manager.register_websocket(session_id, websocket)
 
-    # Send initial state snapshot
     await websocket.send_json({
         "type": "init",
         "session_id": session_id,
@@ -184,14 +185,30 @@ async def websocket_training(websocket: WebSocket, session_id: str):
                         "best_actions": session.agent.get_best_actions()
                     })
                 elif cmd == "set_speed":
-                    delay = data.get("delay_ms", 30)
-                    session.set_speed_delay(delay)
+                    session.set_speed_delay(data.get("delay_ms", 30))
                 elif cmd == "run_demo":
-                    speed = data.get("speed_ms", 250)
-                    session_manager.run_policy_demo(session_id, speed)
+                    session_manager.run_policy_demo(session_id, data.get("speed_ms", 250))
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
         session_manager.remove_websocket(session_id, websocket)
     except Exception:
         session_manager.remove_websocket(session_id, websocket)
+
+
+# ── Static Frontend (production) ──────────────────────────────────────────────
+# In Docker/Render the built React app is copied to ./static/
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+if os.path.isdir(_STATIC_DIR):
+    # Serve /assets/* directly (Vite output)
+    _assets = os.path.join(_STATIC_DIR, "assets")
+    if os.path.isdir(_assets):
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+    # SPA catch-all — serve index.html for any unmatched path
+    _index = os.path.join(_STATIC_DIR, "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        return FileResponse(_index)
