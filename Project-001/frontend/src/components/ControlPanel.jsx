@@ -2,7 +2,7 @@ import React from 'react';
 import { Bot, Flag, Ban, Eraser, Play, Pause, RotateCcw, Zap, Flame, Waves, Snowflake, Orbit, Layers } from 'lucide-react';
 
 export default function ControlPanel({
-  trainingStatus, activeTool, setActiveTool,
+  trainingStatus, activeTool, setActiveTool, pendingPortalEntry = null,
   onStart, onPause, onResume, onReset, onRunPolicy,
   delayMs, onSpeedChange,
   showQValues, setShowQValues, showPolicyArrows, setShowPolicyArrows,
@@ -29,7 +29,18 @@ export default function ControlPanel({
       <div className="card-section">
         <div className="section-header">
           <span className="section-title">Editor Tools</span>
-          <span style={{ fontSize: 11, color: '#bbb', marginLeft: 'auto' }}>Select tool & click grid</span>
+          <span
+            style={{
+              fontSize: 11,
+              color: activeTool === 'portal' ? '#ab47bc' : '#bbb',
+              fontWeight: activeTool === 'portal' ? 700 : 500,
+              marginLeft: 'auto'
+            }}
+          >
+            {activeTool === 'portal'
+              ? (pendingPortalEntry ? 'Click 2nd cell: Exit' : 'Click 1st cell: Entry')
+              : 'Select tool & click grid'}
+          </span>
         </div>
         <div className="grid grid-cols-4 gap-2">
           {tools.map(({ id, label, icon, color }) => (

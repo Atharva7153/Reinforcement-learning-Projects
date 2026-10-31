@@ -29,13 +29,13 @@ class GridEnvironment:
             if (i[0], i[1]) != self.start and (i[0], i[1]) != self.goal and (i[0], i[1]) not in self.obstacles
         }
 
-        # Portals mapping: directed teleportation from Entrance (r1, c1) -> Exit (r2, c2)
+        # Portals mapping: directional teleportation from entry (r1, c1) -> exit (r2, c2)
         self.portal_map: Dict[Tuple[int, int], Tuple[int, int]] = {}
         for p in config.portals:
             if len(p) >= 4:
-                p1 = (p[0], p[1])
-                p2 = (p[2], p[3])
-                self.portal_map[p1] = p2
+                p_entry = (p[0], p[1])
+                p_exit = (p[2], p[3])
+                self.portal_map[p_entry] = p_exit
 
         self.goal_reward = config.goal_reward
         self.step_penalty = config.step_penalty
@@ -85,6 +85,12 @@ class GridEnvironment:
         if next_state in self.obstacles:
             return state, self.wall_penalty, False
 
+        # Check portal warp: stepping on an entry immediately warps agent to exit
+        if next_state in self.portal_map:
+            dest = self.portal_map[next_state]
+            if dest not in self.obstacles:
+                next_state = dest
+
         # Check cliff / lava tile (fatal fall, episode ends)
         if next_state in self.cliffs:
             return next_state, self.cliff_penalty, True
@@ -92,12 +98,6 @@ class GridEnvironment:
         # Check goal reached
         if next_state == self.goal:
             return next_state, self.goal_reward, True
-
-        # Check portal warp
-        if next_state in self.portal_map:
-            dest = self.portal_map[next_state]
-            if dest != self.goal and dest not in self.obstacles:
-                next_state = dest
 
         # Check mud tile (higher movement penalty)
         if next_state in self.mud:
