@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, KeyRound, DoorClosed } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, KeyRound, DoorClosed, Bot } from 'lucide-react';
 
 const ACTIONS = [
   { key: 'up', label: 'Up', Icon: ArrowUp },
@@ -9,11 +9,15 @@ const ACTIONS = [
 ];
 
 export default function CellInspector({
-  selectedCell, qTable, bestActions, start, goal,
+  mode = 'single',
+  selectedCell, qTable, bestActions, qTable2 = null, bestActions2 = null,
+  start, goal, start2 = null, goal2 = null,
   obstacles = [], cliffs = [], mud = [], ice = [], portals = [], doors = [],
   stateValues = {}, visitCounts = {}
 }) {
   const [inspectKeyMode, setInspectKeyMode] = useState(0);
+  const [inspectAgentIndex, setInspectAgentIndex] = useState(1); // 1 for A1, 2 for A2
+  const isMultiAgent = mode === 'competitive' || mode === 'cooperative';
 
   if (!selectedCell) {
     return (
@@ -30,13 +34,16 @@ export default function CellInspector({
   const key = `${r},${c}`;
   const keyWithMask = `${r},${c},${inspectKeyMode}`;
 
-  // If doors exist, use masked lookup if present, fallback to base
-  const cq = (doors.length > 0 && qTable?.[keyWithMask] !== undefined)
-    ? qTable[keyWithMask]
-    : qTable?.[key];
-  const ba = (doors.length > 0 && bestActions?.[keyWithMask] !== undefined)
-    ? bestActions[keyWithMask]
-    : bestActions?.[key];
+  // Select target agent's Q-table
+  const activeTable = (isMultiAgent && inspectAgentIndex === 2 && qTable2) ? qTable2 : qTable;
+  const activeBest = (isMultiAgent && inspectAgentIndex === 2 && bestActions2) ? bestActions2 : bestActions;
+
+  const cq = (doors.length > 0 && activeTable?.[keyWithMask] !== undefined)
+    ? activeTable[keyWithMask]
+    : activeTable?.[key];
+  const ba = (doors.length > 0 && activeBest?.[keyWithMask] !== undefined)
+    ? activeBest[keyWithMask]
+    : activeBest?.[key];
 
   const isObs = obstacles.some(([or, oc]) => or === r && oc === c);
   const isCliff = cliffs.some(([cr, cc]) => cr === r && cc === c);
@@ -47,7 +54,9 @@ export default function CellInspector({
   const doorItem = (doors || []).find((d) => d[0] === r && d[1] === c);
   const keyItem = (doors || []).find((d) => d[2] === r && d[3] === c);
   const isGoal = goal[0] === r && goal[1] === c;
+  const isGoal2 = mode === 'cooperative' && goal2 && goal2[0] === r && goal2[1] === c;
   const isStart = start[0] === r && start[1] === c;
+  const isStart2 = isMultiAgent && start2 && start2[0] === r && start2[1] === c;
 
   const stateVal = (doors.length > 0 && stateValues?.[keyWithMask] !== undefined)
     ? stateValues[keyWithMask]
@@ -56,7 +65,8 @@ export default function CellInspector({
 
   let typeLabel = 'Empty State';
   let typePill = 'pill-black';
-  if (isGoal) { typeLabel = 'Goal (+100)'; typePill = 'pill-green'; }
+  if (isGoal) { typeLabel = isMultiAgent && goal2 ? 'Goal 1 (+100)' : 'Goal (+100)'; typePill = 'pill-green'; }
+  else if (isGoal2) { typeLabel = 'Goal 2 (+100)'; typePill = 'pill-green'; }
   else if (isObs) { typeLabel = 'Wall'; typePill = 'pill-red'; }
   else if (doorItem) { typeLabel = `Door → Key at [${doorItem[2]}, ${doorItem[3]}]`; typePill = 'pill-orange'; }
   else if (keyItem) { typeLabel = `Key → Door at [${keyItem[0]}, ${keyItem[1]}]`; typePill = 'pill-yellow'; }
@@ -66,7 +76,8 @@ export default function CellInspector({
   else if (portalEntry && portalEntry.length >= 4) { typeLabel = `Portal Entry → [${portalEntry[2]}, ${portalEntry[3]}]`; typePill = 'pill-purple'; }
   else if (portalExit) { typeLabel = `Portal Exit ← [${portalExit[0]}, ${portalExit[1]}]`; typePill = 'pill-purple'; }
   else if (portalEntry) { typeLabel = 'Portal'; typePill = 'pill-purple'; }
-  else if (isStart) { typeLabel = 'Agent Start'; typePill = 'pill-blue'; }
+  else if (isStart) { typeLabel = isMultiAgent ? 'Agent 1 Start' : 'Agent Start'; typePill = 'pill-blue'; }
+  else if (isStart2) { typeLabel = 'Agent 2 Start'; typePill = 'pill-orange'; }
 
   return (
     <div className="card">
@@ -81,9 +92,50 @@ export default function CellInspector({
           <span className={`pill ${typePill}`}>{typeLabel}</span>
         </div>
 
-        {/* State slice tabs if doors exist */}
+        {/* Multi-Agent Selector Tabs */}
+        {isMultiAgent && !isObs && (
+          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-neutral-100">
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#999' }}>Agent:</span>
+            <button
+              type="button"
+              onClick={() => setInspectAgentIndex(1)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 5,
+                border: '1px solid',
+                borderColor: inspectAgentIndex === 1 ? '#0066ff' : '#e5e5e5',
+                background: inspectAgentIndex === 1 ? '#eff6ff' : 'white',
+                color: inspectAgentIndex === 1 ? '#1d4ed8' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              🤖 A1 (Blue)
+            </button>
+            <button
+              type="button"
+              onClick={() => setInspectAgentIndex(2)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 5,
+                border: '1px solid',
+                borderColor: inspectAgentIndex === 2 ? '#ea580c' : '#e5e5e5',
+                background: inspectAgentIndex === 2 ? '#fff7ed' : 'white',
+                color: inspectAgentIndex === 2 ? '#c2410c' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              🤖 A2 (Orange)
+            </button>
+          </div>
+        )}
+
+        {/* Door key slice tabs if doors exist */}
         {doors.length > 0 && !isObs && (
-          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-neutral-150">
+          <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-neutral-100">
             <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#999' }}>Slice:</span>
             <button
               type="button"
@@ -100,7 +152,7 @@ export default function CellInspector({
                 cursor: 'pointer'
               }}
             >
-              Without Key (S₀)
+              Need Key (S₀)
             </button>
             <button
               type="button"
@@ -117,7 +169,7 @@ export default function CellInspector({
                 cursor: 'pointer'
               }}
             >
-              With Key (S₁)
+              Has Key (S₁)
             </button>
           </div>
         )}
@@ -134,23 +186,26 @@ export default function CellInspector({
               {ACTIONS.map(({ key: a, label, Icon }) => {
                 const val = cq?.[a] ?? 0;
                 const isBest = ba === a;
+                const highlightColor = (isMultiAgent && inspectAgentIndex === 2) ? '#ea580c' : '#00c853';
+                const highlightBg = (isMultiAgent && inspectAgentIndex === 2) ? '#fff7ed' : '#edfff5';
+
                 return (
                   <div key={a} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '9px 12px', borderRadius: 9,
-                    background: isBest ? '#edfff5' : '#f7f7f5',
-                    border: `1.5px solid ${isBest ? '#00c853' : '#e5e5e5'}`,
+                    background: isBest ? highlightBg : '#f7f7f5',
+                    border: `1.5px solid ${isBest ? highlightColor : '#e5e5e5'}`,
                     transition: 'all 0.15s ease',
                   }}>
                     <div className="flex items-center gap-1.5">
-                      <Icon size={13} color={isBest ? '#00843d' : '#9b9b9b'} strokeWidth={2.5} />
-                      <span style={{ fontSize: 11, fontWeight: 600, color: isBest ? '#00843d' : '#6b6b6b' }}>
+                      <Icon size={13} color={isBest ? highlightColor : '#9b9b9b'} strokeWidth={2.5} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: isBest ? highlightColor : '#6b6b6b' }}>
                         {label}
                       </span>
                     </div>
                     <span style={{
                       fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700,
-                      color: isBest ? '#00843d' : val > 0 ? '#0066ff' : val < 0 ? '#cc0000' : '#bbb',
+                      color: isBest ? highlightColor : val > 0 ? '#0066ff' : val < 0 ? '#cc0000' : '#bbb',
                     }}>
                       {Number(val).toFixed(2)}
                     </span>

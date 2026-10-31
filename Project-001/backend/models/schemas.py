@@ -2,12 +2,19 @@ from typing import List, Dict, Optional, Literal
 from pydantic import BaseModel, Field
 
 ActionType = Literal['left', 'right', 'up', 'down']
+GameMode = Literal['single', 'competitive', 'cooperative']
 
 class EnvironmentConfig(BaseModel):
+    mode: GameMode = Field(default='single')
     rows: int = Field(default=4, ge=2, le=20)
     cols: int = Field(default=4, ge=2, le=20)
     start: List[int] = Field(default_factory=lambda: [0, 0])
     goal: List[int] = Field(default_factory=lambda: [3, 3])
+    # Multi-agent 2nd positions
+    start2: List[int] = Field(default_factory=lambda: [3, 0])
+    goal2: Optional[List[int]] = None  # In co-op, separate goal for Agent 2 if set
+    collision_penalty: float = -5.0
+    coop_team_reward: float = 100.0
     obstacles: List[List[int]] = Field(default_factory=list)
     cliffs: List[List[int]] = Field(default_factory=list)
     mud: List[List[int]] = Field(default_factory=list)
@@ -42,12 +49,19 @@ class TrainingStartRequest(BaseModel):
 class TrainingStatusResponse(BaseModel):
     session_id: str
     status: str
+    mode: str = "single"
     current_episode: int
     total_episodes: int
     current_step: int
     last_reward: float
     cumulative_reward: float
     epsilon: float
+    # Multi-agent stats
+    wins_agent1: int = 0
+    wins_agent2: int = 0
+    ties: int = 0
+    last_reward2: Optional[float] = None
+    cumulative_reward2: Optional[float] = None
 
 class QTableResponse(BaseModel):
     session_id: str
@@ -55,3 +69,8 @@ class QTableResponse(BaseModel):
     best_actions: Dict[str, Optional[str]]
     state_values: Dict[str, float] = Field(default_factory=dict)
     visit_counts: Dict[str, int] = Field(default_factory=dict)
+    # Multi-agent 2nd agent Q-table
+    q_table2: Optional[Dict[str, Dict[str, float]]] = None
+    best_actions2: Optional[Dict[str, Optional[str]]] = None
+    state_values2: Optional[Dict[str, float]] = None
+    visit_counts2: Optional[Dict[str, int]] = None

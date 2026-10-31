@@ -76,8 +76,14 @@ flowchart LR
 
 ### Core Capabilities of Project-001
 
-- **Interactive Environment Builder:** Add obstacles, cliffs, mud, ice, portals, and two-click **Doors & Keys**, reposition agent start states, and move goals dynamically using direct grid click-and-place tools.
-- **Augmented MDP State Space & Multi-Policy Visualization:** When doors exist, state space augments to $(r, c, \text{has\_key})$, featuring a real-time slice selector between `Need Key` and `Has Key` policies.
+- **Multi-Agent Reinforcement Learning (MARL) Game Modes:**
+  - **Solo Mode (👤):** Single-agent Q-learning across configurable grid environments with stochastic hazards and door/key mechanisms.
+  - **Competitive Race Mode (🏁 2-Agent Duel):** Agent 1 (Blue) and Agent 2 (Orange) race head-to-head to reach the goal first, featuring real-time physical collision handling (bounce-back and penalty), duel scoreboards, and dual convergence lines.
+  - **Cooperative Team Mode (🤝 2-Agent Team):** Both agents must coordinate to reach individual goals (Goal 1 & Goal 2) to trigger a shared cooperative team bonus.
+- **Interactive Environment Builder:** Add obstacles, cliffs, mud, ice, portals, and two-click **Doors & Keys**, reposition agent start states (`Agent 1`, `Agent 2`), and move goals dynamically using direct grid click-and-place tools.
+- **Augmented MDP State Space & Multi-Policy Visualization:** When doors exist, state space augments to $(r, c, \text{has\_key})$, featuring a real-time slice selector between `Need Key` and `Has Key` policies, plus per-agent policy toggles for multi-agent games.
+- **Web Audio API Synthesizers:** Zero-latency sound synthesizers for steps, goal reached, collision bonks, Agent 1 win fanfare, Agent 2 win fanfare, and team victory chords.
+- **Mobile-Responsive UI:** Fluid layouts with touch-friendly controls, adaptive cell geometry down to 320px screens, and side-by-side agent representation within cells.
 - **Live Bidirectional Telemetry:** Stream training progress, instant rewards, 20-episode moving averages, and $\epsilon$-decay in real time over native WebSockets.
 - **Visual Overlays:** Toggle cardinal Q-values and optimal directional policy arrows ($\uparrow, \downarrow, \leftarrow, \rightarrow$) directly on each grid cell.
 - **Time-Travel Episode Replay:** Inspect historical episodes step-by-step with an interactive scrubber, detailed trajectory logs, and animated path playback.

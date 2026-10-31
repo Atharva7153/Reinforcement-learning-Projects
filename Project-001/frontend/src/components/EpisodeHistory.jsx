@@ -27,7 +27,7 @@ export default function EpisodeHistory({
     try {
       const data = await getEpisodeDetail(sessionId, n);
       setEpData(data);
-      if (onStartReplay) onStartReplay(data.path, data.trajectory, n);
+      if (onStartReplay) onStartReplay(data.path || data.path1, data.trajectory, n, data.path2);
       // Auto-scroll to top grid
       window.scrollTo({ top: 0, behavior: 'smooth' });
       if (autoPlay && onTogglePlay) {
@@ -159,18 +159,26 @@ export default function EpisodeHistory({
               </span>
               <span style={{
                 display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700,
-                color: epData.reached_goal ? '#00843d' : '#cc0000',
+                color: epData.winner === 1 ? '#0066ff' : epData.winner === 2 ? '#ea580c' : epData.team_success ? '#059669' : epData.reached_goal ? '#00843d' : '#cc0000',
               }}>
-                {epData.reached_goal
-                  ? <><CheckCircle size={14} /> Goal Reached</>
-                  : <><AlertTriangle size={14} /> Timeout</>}
+                {epData.winner !== undefined && epData.winner !== null
+                  ? (epData.winner === 1 ? '🏁 Agent 1 Won' : epData.winner === 2 ? '🏁 Agent 2 Won' : '🤝 Race Tie')
+                  : epData.team_success !== undefined && epData.team_success !== null
+                    ? (epData.team_success ? '🤝 Team Victory!' : <><AlertTriangle size={14} /> Failed</>)
+                    : epData.reached_goal
+                      ? <><CheckCircle size={14} /> Goal Reached</>
+                      : <><AlertTriangle size={14} /> Timeout</>}
               </span>
             </div>
 
             {/* Mini stats */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
               {[
-                { label: 'Reward', value: epData.total_reward, color: epData.total_reward > 0 ? '#00843d' : '#cc0000' },
+                {
+                  label: epData.total_reward2 !== undefined ? 'A1 / A2 Rew' : 'Reward',
+                  value: epData.total_reward2 !== undefined ? `${epData.total_reward} / ${epData.total_reward2}` : epData.total_reward,
+                  color: epData.total_reward > 0 ? '#00843d' : '#cc0000'
+                },
                 { label: 'Steps', value: epData.steps, color: '#0a0a0a' },
                 { label: 'ε', value: epData.epsilon, color: '#b35c00' },
               ].map(({ label, value, color }) => (

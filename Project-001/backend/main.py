@@ -105,12 +105,18 @@ async def get_status(session_id: str):
     return TrainingStatusResponse(
         session_id=session.session_id,
         status=session.status,
+        mode=session.mode,
         current_episode=session.current_episode,
         total_episodes=session.config.episodes,
         current_step=session.current_step,
         last_reward=session.last_reward,
         cumulative_reward=session.cumulative_reward,
-        epsilon=session.agent.epsilon
+        epsilon=session.agent.epsilon,
+        wins_agent1=session.wins_agent1,
+        wins_agent2=session.wins_agent2,
+        ties=session.ties,
+        last_reward2=session.last_reward2 if session.agent2 else None,
+        cumulative_reward2=session.cumulative_reward2 if session.agent2 else None,
     )
 
 @app.get("/training/{session_id}/q-table", response_model=QTableResponse)
@@ -123,7 +129,11 @@ async def get_q_table(session_id: str):
         q_table=session.agent.get_q_table_serializable(),
         best_actions=session.agent.get_best_actions(),
         state_values=session.agent.get_state_values(),
-        visit_counts=session.visit_counts
+        visit_counts=session.visit_counts,
+        q_table2=session.agent2.get_q_table_serializable() if session.agent2 else None,
+        best_actions2=session.agent2.get_best_actions() if session.agent2 else None,
+        state_values2=session.agent2.get_state_values() if session.agent2 else None,
+        visit_counts2=session.visit_counts2 if session.agent2 else None,
     )
 
 @app.get("/training/{session_id}/episodes")
@@ -155,18 +165,33 @@ async def websocket_training(websocket: WebSocket, session_id: str):
 
     curr_st = session.env.current_state
     init_mask = curr_st[2] if len(curr_st) > 2 else 0
+    start1 = [session.env.start[0], session.env.start[1]]
+    start2 = [session.env.start2[0], session.env.start2[1]]
+    goal1 = [session.env.goal[0], session.env.goal[1]]
+    goal2 = [session.env.goal2[0], session.env.goal2[1]]
+
     await websocket.send_json({
         "type": "init",
         "session_id": session_id,
+        "mode": session.mode,
         "status": session.status,
         "current_episode": session.current_episode,
         "total_episodes": session.config.episodes,
-        "agent_position": [curr_st[0], curr_st[1]],
+        "agent_position": start1,
+        "agent1_position": start1,
+        "agent2_position": start2,
+        "goal": goal1,
+        "goal2": goal2,
+        "wins1": session.wins_agent1,
+        "wins2": session.wins_agent2,
+        "ties": session.ties,
         "key_mask": init_mask,
         "has_key": bool(init_mask & 1),
         "epsilon": session.agent.epsilon,
         "q_table": session.agent.get_q_table_serializable(),
         "best_actions": session.agent.get_best_actions(),
+        "q_table2": session.agent2.get_q_table_serializable() if session.agent2 else None,
+        "best_actions2": session.agent2.get_best_actions() if session.agent2 else None,
         "state_values": session.agent.get_state_values(),
         "visit_counts": session.visit_counts,
         "episode_rewards": session.episode_rewards[-50:]
@@ -188,11 +213,19 @@ async def websocket_training(websocket: WebSocket, session_id: str):
                     session_manager.reset_training(session_id)
                     await websocket.send_json({
                         "type": "reset_ack",
+                        "mode": session.mode,
                         "agent_position": [session.env.start[0], session.env.start[1]],
+                        "agent1_position": [session.env.start[0], session.env.start[1]],
+                        "agent2_position": [session.env.start2[0], session.env.start2[1]],
                         "key_mask": 0,
                         "has_key": False,
+                        "wins1": 0,
+                        "wins2": 0,
+                        "ties": 0,
                         "q_table": session.agent.get_q_table_serializable(),
-                        "best_actions": session.agent.get_best_actions()
+                        "best_actions": session.agent.get_best_actions(),
+                        "q_table2": session.agent2.get_q_table_serializable() if session.agent2 else None,
+                        "best_actions2": session.agent2.get_best_actions() if session.agent2 else None,
                     })
                 elif cmd == "set_speed":
                     session.set_speed_delay(data.get("delay_ms", 30))

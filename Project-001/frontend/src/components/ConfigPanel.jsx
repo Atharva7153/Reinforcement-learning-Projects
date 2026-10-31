@@ -3,8 +3,10 @@ import { Settings2, RefreshCw, Sliders } from 'lucide-react';
 
 const PRESETS = [
   { id: 'classic', label: '3×3 Mini' },
-  { id: 'cliff', label: '6×6 Cliff' },
+  { id: 'race', label: '5×5 Race 🏁' },
+  { id: 'coop', label: '6×6 Co-Op 🤝' },
   { id: 'doorKey', label: '6×6 Door/Key' },
+  { id: 'cliff', label: '6×6 Cliff' },
   { id: 'hazard', label: '8×8 Swamp' },
   { id: 'maze', label: '12×12 Maze' },
   { id: 'mega', label: '20×20 Mega' },
@@ -12,6 +14,7 @@ const PRESETS = [
 
 export default function ConfigPanel({ config, onChange, onApply, isTraining, onLoadPreset }) {
   const set = (field, val) => onChange({ ...config, [field]: val });
+  const isMultiAgent = config.mode === 'competitive' || config.mode === 'cooperative';
 
   return (
     <div className="card">
@@ -28,7 +31,7 @@ export default function ConfigPanel({ config, onChange, onApply, isTraining, onL
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#bbb', marginBottom: 8 }}>
             Quick Presets
           </p>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             {PRESETS.map(({ id, label }) => (
               <button key={id} type="button" disabled={isTraining}
                 onClick={() => onLoadPreset(id)}
@@ -133,22 +136,41 @@ export default function ConfigPanel({ config, onChange, onApply, isTraining, onL
         </div>
 
         {/* Penalty & Reward Tuning */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5" style={{ marginTop: 14 }}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5" style={{ marginTop: 14 }}>
           <div>
             <p style={{ fontSize: 11, fontWeight: 600, color: '#6b6b6b', marginBottom: 4 }}>Goal Reward</p>
             <input type="number" value={config.goal_reward} disabled={isTraining}
               onChange={e => set('goal_reward', Number(e.target.value))} />
           </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#ca8a04', marginBottom: 4 }}>Key Reward</p>
-            <input type="number" value={config.key_reward ?? 10} disabled={isTraining}
-              onChange={e => set('key_reward', Number(e.target.value))} />
-          </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#b45309', marginBottom: 4 }}>Door Penalty</p>
-            <input type="number" value={config.door_penalty ?? -5} disabled={isTraining}
-              onChange={e => set('door_penalty', Number(e.target.value))} />
-          </div>
+
+          {isMultiAgent ? (
+            <>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#cc0000', marginBottom: 4 }}>Collision Penalty</p>
+                <input type="number" value={config.collision_penalty ?? -5} disabled={isTraining}
+                  onChange={e => set('collision_penalty', Number(e.target.value))} />
+              </div>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#059669', marginBottom: 4 }}>Co-op Team Reward</p>
+                <input type="number" value={config.coop_team_reward ?? 100} disabled={isTraining}
+                  onChange={e => set('coop_team_reward', Number(e.target.value))} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#ca8a04', marginBottom: 4 }}>Key Reward</p>
+                <input type="number" value={config.key_reward ?? 10} disabled={isTraining}
+                  onChange={e => set('key_reward', Number(e.target.value))} />
+              </div>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#b45309', marginBottom: 4 }}>Door Penalty</p>
+                <input type="number" value={config.door_penalty ?? -5} disabled={isTraining}
+                  onChange={e => set('door_penalty', Number(e.target.value))} />
+              </div>
+            </>
+          )}
+
           <div>
             <p style={{ fontSize: 11, fontWeight: 600, color: '#e65100', marginBottom: 4 }}>Cliff Penalty</p>
             <input type="number" value={config.cliff_penalty ?? -50} disabled={isTraining}

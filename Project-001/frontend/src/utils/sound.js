@@ -356,3 +356,124 @@ export function playDoorLockedSound(volume = 0.25) {
     });
   } catch {}
 }
+
+/**
+ * Retro bonk / collision sound when Agent 1 and Agent 2 bump into each other
+ */
+export function playCollisionSound(volume = 0.3) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.09);
+
+    gain.gain.setValueAtTime(volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.095);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.1);
+  } catch {}
+}
+
+/**
+ * Energetic electronic fanfare for Agent 1 (Blue) Race victory
+ */
+export function playAgent1WinSound(volume = 0.35) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const notes = [587.33, 739.99, 880.0, 1174.66]; // D5, F#5, A5, D6
+    notes.forEach((freq, idx) => {
+      const t = ctx.currentTime + idx * 0.07;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.15);
+    });
+  } catch {}
+}
+
+/**
+ * Warm triumphant brass fanfare for Agent 2 (Orange) Race victory
+ */
+export function playAgent2WinSound(volume = 0.35) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const notes = [440.0, 554.37, 659.25, 880.0]; // A4, C#5, E5, A5
+    notes.forEach((freq, idx) => {
+      const t = ctx.currentTime + idx * 0.07;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.16);
+    });
+  } catch {}
+}
+
+/**
+ * Rich harmonious chord for Cooperative Team victory!
+ */
+export function playTeamVictorySound(volume = 0.35) {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const chord = [523.25, 659.25, 783.99, 1046.5]; // C Major Chord
+    chord.forEach((freq) => {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(volume * 0.45, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.48);
+    });
+  } catch {}
+}

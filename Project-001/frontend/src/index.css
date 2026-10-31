@@ -496,9 +496,21 @@ button, input[type="range"] {
   border-color: var(--goal-bg) !important;
 }
 
+.rl-cell.is-goal2 {
+  background: #ecfdf5;
+  border-color: #10b981 !important;
+  box-shadow: inset 0 0 8px rgba(16, 185, 129, 0.2);
+}
+
 .rl-cell.is-start {
   background: #eff5ff;
   border-color: rgba(0, 102, 255, 0.5);
+}
+
+.rl-cell.is-start2 {
+  background: #fff7ed;
+  border-color: rgba(234, 88, 12, 0.6) !important;
+  box-shadow: inset 0 0 8px rgba(234, 88, 12, 0.15);
 }
 
 /* --- Agent Token --- */

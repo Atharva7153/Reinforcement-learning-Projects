@@ -21,6 +21,10 @@ import {
   playKeySound,
   playDoorOpenSound,
   playDoorLockedSound,
+  playCollisionSound,
+  playAgent1WinSound,
+  playAgent2WinSound,
+  playTeamVictorySound,
 } from './utils/sound';
 import {
   createEnvironment,
@@ -29,8 +33,12 @@ import {
 } from './services/api';
 
 const DEFAULT_CONFIG = {
+  mode: 'single',
   rows: 4, cols: 4,
   start: [0, 0], goal: [3, 3],
+  start2: [3, 0], goal2: null,
+  collision_penalty: -5,
+  coop_team_reward: 100,
   obstacles: [[1, 1], [1, 2]],
   cliffs: [[2, 1]],
   mud: [[2, 2]],
@@ -54,12 +62,23 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [lastReward, setLastReward] = useState(0);
   const [avgReward, setAvgReward] = useState(0);
+  const [lastReward2, setLastReward2] = useState(0);
+  const [avgReward2, setAvgReward2] = useState(0);
   const [epsilon, setEpsilon] = useState(DEFAULT_CONFIG.epsilon);
+  const [epsilon2, setEpsilon2] = useState(DEFAULT_CONFIG.epsilon);
+  const [wins1, setWins1] = useState(0);
+  const [wins2, setWins2] = useState(0);
+  const [ties, setTies] = useState(0);
+  const [coopSuccesses, setCoopSuccesses] = useState(0);
   const [qTable, setQTable] = useState(null);
   const [bestActions, setBestActions] = useState(null);
+  const [qTable2, setQTable2] = useState(null);
+  const [bestActions2, setBestActions2] = useState(null);
   const [stateValues, setStateValues] = useState({});
   const [visitCounts, setVisitCounts] = useState({});
   const [agentPosition, setAgentPosition] = useState(DEFAULT_CONFIG.start);
+  const [agent2Position, setAgent2Position] = useState(DEFAULT_CONFIG.start2);
+  const [lastCollision, setLastCollision] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null);
   const [history, setHistory] = useState([]);
   const [activeTool, setActiveTool] = useState('wall');
@@ -78,6 +97,36 @@ export default function App() {
       setPendingDoor(null);
     }
   };
+
+  const handleModeChange = (newMode) => {
+    if (trainingStatus === 'training') return;
+    let newStart2 = config.start2 || [config.rows - 1, 0];
+    let newGoal2 = config.goal2;
+    if (newMode === 'cooperative' && !newGoal2) {
+      newGoal2 = [0, config.cols - 1];
+    }
+    const updated = {
+      ...config,
+      mode: newMode,
+      start2: newStart2,
+      goal2: newGoal2,
+    };
+    setConfig(updated);
+    setAgentPosition(updated.start);
+    setAgent2Position(newStart2);
+    setWins1(0);
+    setWins2(0);
+    setTies(0);
+    setCoopSuccesses(0);
+    setLastReward(0);
+    setAvgReward(0);
+    setLastReward2(0);
+    setAvgReward2(0);
+    setQTable2(null);
+    setBestActions2(null);
+    initSession(updated);
+  };
+
   const [showQValues, setShowQValues] = useState(true);
   const [showPolicyArrows, setShowPolicyArrows] = useState(true);
   const [showValueHeatmap, setShowValueHeatmap] = useState(false);
@@ -91,6 +140,7 @@ export default function App() {
   // Replay state
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [replayPath, setReplayPath] = useState([]);
+  const [replayPath2, setReplayPath2] = useState([]);
   const [replayTrajectory, setReplayTrajectory] = useState([]);
   const [replayStepIndex, setReplayStepIndex] = useState(0);
   const [selectedReplayEpisode, setSelectedReplayEpisode] = useState(null);
@@ -103,6 +153,10 @@ export default function App() {
   const playTileSound = useCallback((r, c) => {
     if (!isSoundEnabled()) return;
     if (config.goal[0] === r && config.goal[1] === c) {
+      playGoalSound();
+      return;
+    }
+    if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) {
       playGoalSound();
       return;
     }
@@ -142,68 +196,133 @@ export default function App() {
       case 'init':
         setTrainingStatus(msg.status || 'idle');
         setEpsilon(msg.epsilon ?? DEFAULT_CONFIG.epsilon);
+        if (msg.epsilon2 !== undefined) setEpsilon2(msg.epsilon2);
         if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        if (msg.q_table2) setQTable2(msg.q_table2);
+        if (msg.best_actions2) setBestActions2(msg.best_actions2);
         if (msg.state_values) setStateValues(msg.state_values);
         if (msg.visit_counts) setVisitCounts(msg.visit_counts);
+        if (msg.wins_agent1 !== undefined) setWins1(msg.wins_agent1);
+        if (msg.wins_agent2 !== undefined) setWins2(msg.wins_agent2);
+        if (msg.ties !== undefined) setTies(msg.ties);
         break;
       case 'episode_start':
         setCurrentEpisode(msg.episode);
         setCurrentStep(0);
         setEpsilon(msg.epsilon);
+        if (msg.epsilon2 !== undefined) setEpsilon2(msg.epsilon2);
         if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
+        setLastCollision(false);
         break;
       case 'step':
         setCurrentStep(msg.step);
-        setLastReward(msg.reward);
-        setEpsilon(msg.epsilon);
-        setAgentPosition(msg.agent_position);
+        setLastReward(msg.reward1 ?? msg.reward);
+        if (msg.reward2 !== undefined) setLastReward2(msg.reward2);
+        setEpsilon(msg.epsilon1 ?? msg.epsilon);
+        if (msg.epsilon2 !== undefined) setEpsilon2(msg.epsilon2);
+        setAgentPosition(msg.agent1_position ?? msg.agent_position);
+        if (msg.agent2_position) setAgent2Position(msg.agent2_position);
         if (msg.key_mask !== undefined) setCurrentKeyMask(msg.key_mask);
+
+        if (msg.collision) {
+          setLastCollision(true);
+          playCollisionSound();
+          setTimeout(() => setLastCollision(false), 240);
+        }
+
         if (delayMs >= 20) {
-          playTileSound(msg.agent_position[0], msg.agent_position[1]);
+          const a1Pos = msg.agent1_position ?? msg.agent_position;
+          playTileSound(a1Pos[0], a1Pos[1]);
+          if (msg.agent2_position) {
+            playTileSound(msg.agent2_position[0], msg.agent2_position[1]);
+          }
         }
         break;
       case 'episode_end':
         setCurrentEpisode(msg.episode);
         setLastReward(msg.episode_reward);
+        if (msg.episode_reward2 !== undefined) setLastReward2(msg.episode_reward2);
         setAvgReward(msg.avg_reward);
+        if (msg.avg_reward2 !== undefined) setAvgReward2(msg.avg_reward2);
         setEpsilon(msg.epsilon);
+        if (msg.epsilon2 !== undefined) setEpsilon2(msg.epsilon2);
+        if (msg.wins1 !== undefined) setWins1(msg.wins1);
+        if (msg.wins2 !== undefined) setWins2(msg.wins2);
+        if (msg.ties !== undefined) setTies(msg.ties);
+        if (msg.coop_successes !== undefined) setCoopSuccesses(msg.coop_successes);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        if (msg.q_table2) setQTable2(msg.q_table2);
+        if (msg.best_actions2) setBestActions2(msg.best_actions2);
         if (msg.state_values) setStateValues(msg.state_values);
         if (msg.visit_counts) setVisitCounts(msg.visit_counts);
-        if (msg.episode_reward >= (config.goal_reward * 0.8)) {
-          playGoalSound(0.25);
+
+        // Sound cues for victories
+        if (config.mode === 'competitive') {
+          if (msg.winner === 1) playAgent1WinSound(0.25);
+          else if (msg.winner === 2) playAgent2WinSound(0.25);
+        } else if (config.mode === 'cooperative') {
+          if (msg.winner === 1 || msg.winner === 2 || msg.coop_successes > coopSuccesses) {
+            playTeamVictorySound(0.25);
+          }
+        } else {
+          if (msg.episode_reward >= (config.goal_reward * 0.8)) {
+            playGoalSound(0.25);
+          }
         }
+
         setHistory((prev) => [
           ...prev.slice(-150),
           {
             episode: msg.episode,
             reward: msg.episode_reward,
+            reward1: msg.episode_reward,
+            reward2: msg.episode_reward2 ?? 0,
             avgReward: msg.avg_reward,
+            avgReward1: msg.avg_reward,
+            avgReward2: msg.avg_reward2 ?? 0,
             steps: msg.steps,
+            winner: msg.winner,
             avg_td_error: msg.avg_td_error ?? 0,
           },
         ]);
         break;
       case 'training_finished':
         setTrainingStatus('finished');
+        if (msg.wins1 !== undefined) setWins1(msg.wins1);
+        if (msg.wins2 !== undefined) setWins2(msg.wins2);
+        if (msg.ties !== undefined) setTies(msg.ties);
+        if (msg.coop_successes !== undefined) setCoopSuccesses(msg.coop_successes);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        if (msg.q_table2) setQTable2(msg.q_table2);
+        if (msg.best_actions2) setBestActions2(msg.best_actions2);
         if (msg.state_values) setStateValues(msg.state_values);
         if (msg.visit_counts) setVisitCounts(msg.visit_counts);
-        setEpsilon(msg.final_epsilon);
+        if (msg.final_epsilon !== undefined) setEpsilon(msg.final_epsilon);
         break;
       case 'reset_ack':
-        setAgentPosition(msg.agent_position);
+        setAgentPosition(msg.agent_position || config.start);
+        setAgent2Position(config.start2 || [config.rows - 1, 0]);
         if (msg.q_table) setQTable(msg.q_table);
         if (msg.best_actions) setBestActions(msg.best_actions);
+        setQTable2(null);
+        setBestActions2(null);
         setTrainingStatus('idle');
         setCurrentEpisode(0);
         setCurrentStep(0);
         setCurrentKeyMask(0);
         setPolicyKeyView(0);
+        setWins1(0);
+        setWins2(0);
+        setTies(0);
+        setCoopSuccesses(0);
+        setLastReward(0);
+        setAvgReward(0);
+        setLastReward2(0);
+        setAvgReward2(0);
         setHistory([]);
         setIsReplayMode(false);
         setIsReplayPlaying(false);
@@ -211,27 +330,45 @@ export default function App() {
       case 'policy_demo_start':
         setIsPolicyRunning(true);
         setIsReplayMode(false);
-        setAgentPosition(msg.start);
+        setAgentPosition(msg.start1 || msg.start);
+        if (msg.start2) setAgent2Position(msg.start2);
         setCurrentKeyMask(0);
         setPolicyKeyView(0);
         playStepSound(0.2);
         break;
       case 'policy_demo_step':
-        setAgentPosition(msg.agent_position);
+        setAgentPosition(msg.agent1_position || msg.agent_position);
+        if (msg.agent2_position) setAgent2Position(msg.agent2_position);
         if (msg.key_mask !== undefined) {
           setCurrentKeyMask(msg.key_mask);
           if (msg.has_key) setPolicyKeyView(1);
         }
-        playTileSound(msg.agent_position[0], msg.agent_position[1]);
+        if (msg.collision) {
+          setLastCollision(true);
+          playCollisionSound();
+          setTimeout(() => setLastCollision(false), 240);
+        }
+        const a1P = msg.agent1_position || msg.agent_position;
+        playTileSound(a1P[0], a1P[1]);
+        if (msg.agent2_position) {
+          playTileSound(msg.agent2_position[0], msg.agent2_position[1]);
+        }
         break;
       case 'policy_demo_finished':
         setIsPolicyRunning(false);
-        if (msg.reached_goal) playGoalSound();
+        if (config.mode === 'competitive') {
+          if (msg.winner === 1) playAgent1WinSound();
+          else if (msg.winner === 2) playAgent2WinSound();
+        } else if (config.mode === 'cooperative') {
+          if (msg.team_success || msg.success) playTeamVictorySound();
+        } else {
+          if (msg.success || msg.reached_goal) playGoalSound();
+        }
         break;
       default:
         break;
     }
-  }, []);
+  }, [config, delayMs, playTileSound, coopSuccesses]);
 
   const setupWebSocket = useCallback((sid) => {
     if (wsRef.current) {
@@ -262,6 +399,7 @@ export default function App() {
       clearTimeout(reconnectTimeoutRef.current);
       setIsReplayMode(false);
       setReplayPath([]);
+      setReplayPath2([]);
       setReplayStepIndex(0);
       setErrorMessage(null);
 
@@ -272,13 +410,25 @@ export default function App() {
       setCurrentStep(0);
       setLastReward(0);
       setAvgReward(0);
+      setLastReward2(0);
+      setAvgReward2(0);
+      setWins1(0);
+      setWins2(0);
+      setTies(0);
+      setCoopSuccesses(0);
       setEpsilon(cfg.epsilon);
+      setEpsilon2(cfg.epsilon);
       setAgentPosition(cfg.start);
+      setAgent2Position(cfg.start2 || [cfg.rows - 1, 0]);
       setSelectedCell(null);
       setPendingPortalEntry(null);
       setHistory([]);
       setStateValues({});
       setVisitCounts({});
+      setQTable(null);
+      setBestActions(null);
+      setQTable2(null);
+      setBestActions2(null);
 
       setupWebSocket(data.session_id);
       return data.session_id;
@@ -313,6 +463,8 @@ export default function App() {
           const qData = await getQTable(sessionId);
           setQTable(qData.q_table);
           setBestActions(qData.best_actions);
+          if (qData.q_table2) setQTable2(qData.q_table2);
+          if (qData.best_actions2) setBestActions2(qData.best_actions2);
           if (qData.state_values) setStateValues(qData.state_values);
           if (qData.visit_counts) setVisitCounts(qData.visit_counts);
         }
@@ -347,21 +499,46 @@ export default function App() {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if (config.goal[0] === r && config.goal[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
       const nc = { ...cleanConfig, start: [r, c] };
       setConfig(nc);
       setAgentPosition([r, c]);
+      initSession(nc);
+    } else if (activeTool === 'agent2') {
+      setPendingPortalEntry(null);
+      setPendingDoor(null);
+      if (config.start[0] === r && config.start[1] === c) return;
+      if (config.goal[0] === r && config.goal[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
+      const nc = { ...cleanConfig, start2: [r, c] };
+      setConfig(nc);
+      setAgent2Position([r, c]);
       initSession(nc);
     } else if (activeTool === 'goal') {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if (config.start[0] === r && config.start[1] === c) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
       const nc = { ...cleanConfig, goal: [r, c] };
+      setConfig(nc);
+      initSession(nc);
+    } else if (activeTool === 'goal2') {
+      setPendingPortalEntry(null);
+      setPendingDoor(null);
+      if (config.start[0] === r && config.start[1] === c) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal[0] === r && config.goal[1] === c) return;
+      const nc = { ...cleanConfig, goal2: [r, c] };
       setConfig(nc);
       initSession(nc);
     } else if (activeTool === 'wall') {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
       const exists = isMatch(config.obstacles || []);
       const updated = exists ? filterOut(config.obstacles) : [...filterOut(config.obstacles), [r, c]];
       const nc = { ...cleanConfig, obstacles: updated };
@@ -371,6 +548,8 @@ export default function App() {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
       const exists = isMatch(config.cliffs || []);
       const updated = exists ? filterOut(config.cliffs) : [...filterOut(config.cliffs), [r, c]];
       const nc = { ...cleanConfig, cliffs: updated };
@@ -380,6 +559,8 @@ export default function App() {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
       const exists = isMatch(config.mud || []);
       const updated = exists ? filterOut(config.mud) : [...filterOut(config.mud), [r, c]];
       const nc = { ...cleanConfig, mud: updated };
@@ -389,6 +570,8 @@ export default function App() {
       setPendingPortalEntry(null);
       setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
       const exists = isMatch(config.ice || []);
       const updated = exists ? filterOut(config.ice) : [...filterOut(config.ice), [r, c]];
       const nc = { ...cleanConfig, ice: updated };
@@ -397,6 +580,8 @@ export default function App() {
     } else if (activeTool === 'door') {
       setPendingPortalEntry(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
 
       if (!pendingDoor) {
         // --- CLICK 1: DROP DOOR ---
@@ -453,6 +638,8 @@ export default function App() {
     } else if (activeTool === 'portal') {
       setPendingDoor(null);
       if ((config.start[0] === r && config.start[1] === c) || (config.goal[0] === r && config.goal[1] === c)) return;
+      if (config.start2 && config.start2[0] === r && config.start2[1] === c) return;
+      if (config.goal2 && config.goal2[0] === r && config.goal2[1] === c) return;
 
       if (!pendingPortalEntry) {
         // --- CLICK 1: DROP ENTRY ---
@@ -583,7 +770,16 @@ export default function App() {
       setCurrentStep(0);
       setLastReward(0);
       setAvgReward(0);
+      setLastReward2(0);
+      setAvgReward2(0);
+      setWins1(0);
+      setWins2(0);
+      setTies(0);
+      setCoopSuccesses(0);
+      setQTable2(null);
+      setBestActions2(null);
       setAgentPosition(config.start);
+      setAgent2Position(config.start2 || [config.rows - 1, 0]);
       setPendingPortalEntry(null);
       setHistory([]);
       setStateValues({});
@@ -634,6 +830,37 @@ export default function App() {
         obstacles: [[1, 0]],
         cliffs: [], mud: [], ice: [], portals: [],
         episodes: 300, max_steps: 50,
+      };
+    } else if (type === 'race') {
+      preset = {
+        ...DEFAULT_CONFIG,
+        mode: 'competitive',
+        rows: 5, cols: 5,
+        start: [0, 0],
+        start2: [4, 0],
+        goal: [2, 4],
+        goal2: null,
+        collision_penalty: -5,
+        obstacles: [[1, 2], [3, 2]],
+        cliffs: [], mud: [[2, 2]], ice: [[0, 2], [4, 2]],
+        portals: [], doors: [],
+        episodes: 500, max_steps: 80, delay_ms: 25,
+      };
+    } else if (type === 'coop') {
+      preset = {
+        ...DEFAULT_CONFIG,
+        mode: 'cooperative',
+        rows: 6, cols: 6,
+        start: [0, 0],
+        start2: [5, 0],
+        goal: [0, 5],
+        goal2: [5, 5],
+        collision_penalty: -5,
+        coop_team_reward: 100,
+        obstacles: [[2, 2], [2, 3], [3, 2], [3, 3]],
+        cliffs: [], mud: [[1, 3], [4, 3]], ice: [],
+        portals: [], doors: [],
+        episodes: 600, max_steps: 100, delay_ms: 25,
       };
     } else if (type === 'doorKey') {
       // 6x6 Door & Key MDP: Goal behind wall, Door at [3, 3], Key at [4, 0]
@@ -720,32 +947,38 @@ export default function App() {
       setCurrentKeyMask(0);
       setPolicyKeyView(0);
       setConfig(preset);
+      setAgentPosition(preset.start);
+      setAgent2Position(preset.start2 || [preset.rows - 1, 0]);
       initSession(preset);
     }
   };
 
-  const handleStartReplay = (path, trajectory, epNumber) => {
+  const handleStartReplay = (path, trajectory, epNumber, path2) => {
     setIsReplayMode(true);
     setIsReplayPlaying(false);
     setReplayPath(path || []);
+    setReplayPath2(path2 || []);
     setReplayTrajectory(trajectory || []);
     setReplayStepIndex(0);
     setCurrentKeyMask(0);
     setPolicyKeyView(0);
     if (epNumber) setSelectedReplayEpisode(epNumber);
     if (path?.length > 0) setAgentPosition(path[0]);
+    if (path2?.length > 0) setAgent2Position(path2[0]);
   };
 
   const handleStopReplay = () => {
     setIsReplayMode(false);
     setIsReplayPlaying(false);
     setReplayPath([]);
+    setReplayPath2([]);
     setReplayTrajectory([]);
     setReplayStepIndex(0);
     setCurrentKeyMask(0);
     setPolicyKeyView(0);
     setSelectedReplayEpisode(null);
     setAgentPosition(config.start);
+    setAgent2Position(config.start2 || [config.rows - 1, 0]);
   };
 
   const handleReplayStep = useCallback((valOrFn) => {
@@ -754,6 +987,10 @@ export default function App() {
       if (replayPath?.[next]) {
         const [r, c] = replayPath[next];
         setAgentPosition([r, c]);
+        if (replayPath2?.[next]) {
+          const [r2, c2] = replayPath2[next];
+          setAgent2Position([r2, c2]);
+        }
         if (next === 0) {
           setCurrentKeyMask(0);
           setPolicyKeyView(0);
@@ -768,7 +1005,7 @@ export default function App() {
       }
       return next;
     });
-  }, [replayPath, replayTrajectory, playTileSound]);
+  }, [replayPath, replayPath2, replayTrajectory, playTileSound]);
 
   const handleToggleReplayPlay = useCallback((withScrollDelay = false) => {
     if (isReplayPlaying) {
@@ -959,6 +1196,7 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Training Stats */}
           <TrainingStats
+            mode={config.mode || 'single'}
             trainingStatus={trainingStatus}
             currentEpisode={currentEpisode}
             totalEpisodes={config.episodes}
@@ -966,6 +1204,13 @@ export default function App() {
             lastReward={lastReward}
             avgReward={avgReward}
             epsilon={epsilon}
+            wins1={wins1}
+            wins2={wins2}
+            ties={ties}
+            coopSuccesses={coopSuccesses}
+            lastReward2={lastReward2}
+            avgReward2={avgReward2}
+            epsilon2={epsilon2}
           />
 
           {/* Grid World Card */}
@@ -983,7 +1228,7 @@ export default function App() {
                     }}
                   />
                   <span style={{ fontSize: 13, fontWeight: 800, color: '#0a0a0a', letterSpacing: '-0.02em' }}>
-                    GridWorld {config.rows}×{config.cols} ({config.rows * config.cols} States)
+                    GridWorld {config.rows}×{config.cols} ({config.rows * config.cols} States) {config.mode === 'competitive' ? '· 🏁 Race' : config.mode === 'cooperative' ? '· 🤝 Co-op' : ''}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#bbb', fontWeight: 500 }}>
@@ -994,10 +1239,13 @@ export default function App() {
 
             <div className="rl-grid-container">
               <GridEnvironment
+                mode={config.mode || 'single'}
                 rows={config.rows}
                 cols={config.cols}
                 start={config.start}
                 goal={config.goal}
+                start2={config.start2 || [config.rows - 1, 0]}
+                goal2={config.goal2}
                 obstacles={config.obstacles || []}
                 cliffs={config.cliffs || []}
                 mud={config.mud || []}
@@ -1010,8 +1258,11 @@ export default function App() {
                 policyKeyView={policyKeyView}
                 onTogglePolicyKeyView={setPolicyKeyView}
                 agentPosition={agentPosition}
+                agent2Position={agent2Position}
                 qTable={qTable}
                 bestActions={bestActions}
+                qTable2={qTable2}
+                bestActions2={bestActions2}
                 stateValues={stateValues}
                 visitCounts={visitCounts}
                 activeTool={activeTool}
@@ -1023,6 +1274,7 @@ export default function App() {
                 showVisitHeatmap={showVisitHeatmap}
                 isTraining={trainingStatus === 'training'}
                 replayPath={replayPath}
+                replayPath2={replayPath2}
                 replayStepIndex={replayStepIndex}
                 isReplayMode={isReplayMode}
                 selectedReplayEpisode={selectedReplayEpisode}
@@ -1030,6 +1282,7 @@ export default function App() {
                 onToggleReplayPlay={() => handleToggleReplayPlay(false)}
                 onReplayStepChange={handleReplayStep}
                 onExitReplay={handleStopReplay}
+                lastCollision={lastCollision}
               />
             </div>
           </div>
@@ -1037,6 +1290,7 @@ export default function App() {
           {/* Multi-Graph Interactive Analytics */}
           <LearningCurve
             history={history}
+            mode={config.mode || 'single'}
             onSelectEpisode={(ep) => {
               setSelectedReplayEpisode(ep);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1064,6 +1318,8 @@ export default function App() {
         {/* RIGHT COLUMN: Controls + Inspector + Configuration */}
         <div className="right-column-container">
           <ControlPanel
+            mode={config.mode || 'single'}
+            onModeChange={handleModeChange}
             trainingStatus={trainingStatus}
             activeTool={activeTool}
             setActiveTool={handleSelectTool}
@@ -1089,11 +1345,16 @@ export default function App() {
           />
 
           <CellInspector
+            mode={config.mode || 'single'}
             selectedCell={selectedCell}
             qTable={qTable}
             bestActions={bestActions}
+            qTable2={qTable2}
+            bestActions2={bestActions2}
             start={config.start}
             goal={config.goal}
+            start2={config.start2 || [config.rows - 1, 0]}
+            goal2={config.goal2}
             obstacles={config.obstacles || []}
             cliffs={config.cliffs || []}
             mud={config.mud || []}

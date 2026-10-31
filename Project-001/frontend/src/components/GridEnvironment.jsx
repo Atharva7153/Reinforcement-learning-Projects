@@ -1,27 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit, Play, Pause, SkipBack, SkipForward, X, KeyRound, DoorClosed, DoorOpen } from 'lucide-react';
+import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit, Play, Pause, SkipBack, SkipForward, X, KeyRound, DoorClosed, DoorOpen, Trophy, Users } from 'lucide-react';
 
 export default function GridEnvironment({
+  mode = 'single',
   rows, cols, start, goal,
+  start2 = null, goal2 = null,
   obstacles = [], cliffs = [], mud = [], ice = [], portals = [],
   doors = [], pendingDoor = null, currentKeyMask = 0,
   policyKeyView = 0, onTogglePolicyKeyView = null,
   pendingPortalEntry = null,
-  agentPosition, qTable, bestActions, stateValues = {}, visitCounts = {},
+  agentPosition, agent2Position = null,
+  qTable, bestActions, qTable2 = null, bestActions2 = null,
+  stateValues = {}, visitCounts = {},
   activeTool, onCellClick, selectedCell,
   showQValues, showPolicyArrows, showValueHeatmap = false, showVisitHeatmap = false,
-  isTraining, replayPath = [], replayStepIndex = 0, isReplayMode = false,
+  isTraining, replayPath = [], replayPath2 = [], replayStepIndex = 0, isReplayMode = false,
   selectedReplayEpisode = null,
   isReplayPlaying = false,
   onToggleReplayPlay = null,
   onReplayStepChange = null,
   onExitReplay = null,
+  lastCollision = false,
 }) {
-  const agent = agentPosition || start;
-  const isAgent = (r, c) => agent[0] === r && agent[1] === c;
+  const isMultiAgent = mode === 'competitive' || mode === 'cooperative';
+  const [multiArrowView, setMultiArrowView] = useState('agent1'); // 'agent1' | 'agent2'
+
+  const a1 = agentPosition || start;
+  const a2 = agent2Position || (start2 || [rows - 1, 0]);
+
+  const isAgent1 = (r, c) => a1[0] === r && a1[1] === c;
+  const isAgent2 = (r, c) => isMultiAgent && a2[0] === r && a2[1] === c;
   const isGoal = (r, c) => goal[0] === r && goal[1] === c;
+  const isGoal2 = (r, c) => mode === 'cooperative' && goal2 && goal2[0] === r && goal2[1] === c && !(goal[0] === r && goal[1] === c);
   const isStart = (r, c) => start[0] === r && start[1] === c;
+  const isStart2 = (r, c) => isMultiAgent && start2 && start2[0] === r && start2[1] === c;
   const isObs = (r, c) => obstacles.some(([or, oc]) => or === r && oc === c);
   const isCliff = (r, c) => cliffs.some(([cr, cc]) => cr === r && cc === c);
   const isMud = (r, c) => mud.some(([mr, mc]) => mr === r && mc === c);
@@ -87,7 +100,6 @@ export default function GridEnvironment({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Responsive cell sizing for 3x3 up to 20x20
   const maxDim = Math.max(rows, cols);
   let baseCellSize = 64;
   if (maxDim <= 4) baseCellSize = 76;
@@ -98,7 +110,6 @@ export default function GridEnvironment({
   else if (maxDim <= 16) baseCellSize = 27;
   else baseCellSize = 23;
 
-  // On small mobile screens, adapt cell size so grids up to 8x8 fit directly in the viewport
   const availWidth = Math.max(260, screenWidth - 64);
   const maxCellForScreen = Math.floor((availWidth - (cols - 1) * 5 - 12) / cols);
   const cellSize = Math.max(22, Math.min(baseCellSize, Math.max(24, maxCellForScreen)));
@@ -115,12 +126,16 @@ export default function GridEnvironment({
   const arrowSize = Math.max(10, Math.min(18, Math.round(cellSize * 0.32)));
   const iconSize = Math.max(11, Math.min(24, Math.round(cellSize * 0.42)));
 
-  const ARROW_MAP = {
-    up: <ArrowUp size={arrowSize} color="#ff6d00" strokeWidth={2.8} />,
-    down: <ArrowDown size={arrowSize} color="#ff6d00" strokeWidth={2.8} />,
-    left: <ArrowLeft size={arrowSize} color="#ff6d00" strokeWidth={2.8} />,
-    right: <ArrowRight size={arrowSize} color="#ff6d00" strokeWidth={2.8} />,
-  };
+  const makeArrowMap = (color) => ({
+    up: <ArrowUp size={arrowSize} color={color} strokeWidth={2.8} />,
+    down: <ArrowDown size={arrowSize} color={color} strokeWidth={2.8} />,
+    left: <ArrowLeft size={arrowSize} color={color} strokeWidth={2.8} />,
+    right: <ArrowRight size={arrowSize} color={color} strokeWidth={2.8} />,
+  });
+
+  const ARROW_MAP_A1 = makeArrowMap('#0066ff');
+  const ARROW_MAP_A2 = makeArrowMap('#ea580c');
+  const ARROW_MAP_DEFAULT = makeArrowMap('#ff6d00');
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
@@ -143,7 +158,6 @@ export default function GridEnvironment({
             maxWidth: 560,
           }}
         >
-          {/* Episode Badge & Steps */}
           <div className="flex items-center gap-2">
             <span
               style={{
@@ -164,7 +178,6 @@ export default function GridEnvironment({
             </span>
           </div>
 
-          {/* Player controls */}
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -211,8 +224,8 @@ export default function GridEnvironment({
         </motion.div>
       )}
 
-      {/* Door & Key Policy View Selector (if doors are configured) */}
-      {doors.length > 0 && !isReplayMode && (
+      {/* Multi-Agent Arrow View Selector */}
+      {isMultiAgent && !isReplayMode && (
         <div
           style={{
             display: 'flex',
@@ -221,56 +234,51 @@ export default function GridEnvironment({
             width: '100%',
             maxWidth: 560,
             padding: '6px 12px',
-            background: '#fffbf0',
-            border: '1.5px solid #fed7aa',
+            background: mode === 'competitive' ? '#fff7ed' : '#ecfdf5',
+            border: `1.5px solid ${mode === 'competitive' ? '#ffedd5' : '#d1fae5'}`,
             borderRadius: 10,
           }}
         >
           <div className="flex items-center gap-2">
-            <KeyRound size={13} color="#d97706" />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>
-              Policy View
-            </span>
-            <span style={{ fontSize: 10, color: '#b45309', opacity: 0.8 }}>
-              {policyKeyView === 0 ? '(Targeting Key)' : '(Targeting Goal via Open Door)'}
+            {mode === 'competitive' ? <Trophy size={13} color="#ea580c" /> : <Users size={13} color="#059669" />}
+            <span style={{ fontSize: 11, fontWeight: 700, color: mode === 'competitive' ? '#9a3412' : '#065f46' }}>
+              {mode === 'competitive' ? 'Race Duel' : 'Co-Op Team'} Policy
             </span>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => onTogglePolicyKeyView && onTogglePolicyKeyView(0)}
+              onClick={() => setMultiArrowView('agent1')}
               style={{
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '3px 8px',
                 borderRadius: 6,
                 border: '1px solid',
-                borderColor: policyKeyView === 0 ? '#d97706' : '#fed7aa',
-                background: policyKeyView === 0 ? '#d97706' : 'white',
-                color: policyKeyView === 0 ? 'white' : '#92400e',
-                cursor: 'pointer',
-                transition: 'all 0.12s'
+                borderColor: multiArrowView === 'agent1' ? '#0066ff' : '#d4d4d4',
+                background: multiArrowView === 'agent1' ? '#0066ff' : 'white',
+                color: multiArrowView === 'agent1' ? 'white' : '#0066ff',
+                cursor: 'pointer'
               }}
             >
-              🗝️ Need Key (S₀)
+              🤖 A1 (Blue)
             </button>
             <button
               type="button"
-              onClick={() => onTogglePolicyKeyView && onTogglePolicyKeyView(1)}
+              onClick={() => setMultiArrowView('agent2')}
               style={{
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '3px 8px',
                 borderRadius: 6,
                 border: '1px solid',
-                borderColor: policyKeyView === 1 ? '#16a34a' : '#fed7aa',
-                background: policyKeyView === 1 ? '#16a34a' : 'white',
-                color: policyKeyView === 1 ? 'white' : '#166534',
-                cursor: 'pointer',
-                transition: 'all 0.12s'
+                borderColor: multiArrowView === 'agent2' ? '#ea580c' : '#d4d4d4',
+                background: multiArrowView === 'agent2' ? '#ea580c' : 'white',
+                color: multiArrowView === 'agent2' ? 'white' : '#ea580c',
+                cursor: 'pointer'
               }}
             >
-              🔓 Has Key (S₁)
+              🤖 A2 (Orange)
             </button>
           </div>
         </div>
@@ -296,22 +304,32 @@ export default function GridEnvironment({
             const pInfo = getPortalInfo(r, c);
             const dInfo = getDoorInfo(r, c);
             const goalHere = isGoal(r, c);
+            const goal2Here = isGoal2(r, c);
             const startHere = isStart(r, c);
-            const agentHere = isAgent(r, c);
+            const start2Here = isStart2(r, c);
+            const agent1Here = isAgent1(r, c);
+            const agent2Here = isAgent2(r, c);
             const sel = isSel(r, c);
 
-            // Lookup Q-table and policy arrows with key mask slice if doors present
+            // Active Q and Best Action based on mode & arrow view
+            const activeBestActions = (isMultiAgent && multiArrowView === 'agent2' && bestActions2)
+              ? bestActions2
+              : bestActions;
+            const activeQTable = (isMultiAgent && multiArrowView === 'agent2' && qTable2)
+              ? qTable2
+              : qTable;
+
             const keyWithMask = `${r},${c},${policyKeyView}`;
-            const cq = (doors.length > 0 && qTable?.[keyWithMask] !== undefined)
-              ? qTable[keyWithMask]
-              : qTable?.[key];
-            const ba = (doors.length > 0 && bestActions?.[keyWithMask] !== undefined)
-              ? bestActions[keyWithMask]
-              : bestActions?.[key];
+            const cq = (doors.length > 0 && activeQTable?.[keyWithMask] !== undefined)
+              ? activeQTable[keyWithMask]
+              : activeQTable?.[key];
+            const ba = (doors.length > 0 && activeBestActions?.[keyWithMask] !== undefined)
+              ? activeBestActions[keyWithMask]
+              : activeBestActions?.[key];
 
-            const inReplay = isReplayMode && replayPath.some((p) => p[0] === r && p[1] === c);
+            const inReplay1 = isReplayMode && replayPath.some((p) => p[0] === r && p[1] === c);
+            const inReplay2 = isReplayMode && replayPath2.some((p) => p[0] === r && p[1] === c);
 
-            // Heatmap background calculation
             let heatBg = undefined;
             if (showValueHeatmap && !obs && !cliff && stateValues[key] !== undefined) {
               const norm = Math.max(0, Math.min(1, (stateValues[key] - minStateVal) / valRange));
@@ -320,6 +338,10 @@ export default function GridEnvironment({
               const norm = Math.min(1, visitCounts[key] / maxVisits);
               heatBg = `rgba(106, 27, 154, ${norm * 0.45})`;
             }
+
+            const arrowMap = isMultiAgent
+              ? (multiArrowView === 'agent2' ? ARROW_MAP_A2 : ARROW_MAP_A1)
+              : ARROW_MAP_DEFAULT;
 
             return (
               <motion.div
@@ -339,8 +361,11 @@ export default function GridEnvironment({
                   ${dInfo.isPending ? 'is-door-pending' : ''}
                   ${dInfo.isKey ? (dInfo.isCollected ? 'is-key is-key-collected' : 'is-key') : ''}
                   ${goalHere && !obs ? 'is-goal' : ''}
+                  ${goal2Here && !obs ? 'is-goal2' : ''}
                   ${startHere && !obs && !goalHere ? 'is-start' : ''}
-                  ${inReplay && !obs ? 'ring-2 ring-amber-300' : ''}
+                  ${start2Here && !obs && !goalHere && !goal2Here ? 'is-start2' : ''}
+                  ${(inReplay1 || inReplay2) && !obs ? 'ring-2 ring-amber-300' : ''}
+                  ${lastCollision && agent1Here && agent2Here ? 'ring-4 ring-red-500' : ''}
                 `}
                 style={{
                   width: cellSize,
@@ -348,7 +373,7 @@ export default function GridEnvironment({
                   backgroundColor: heatBg || undefined,
                 }}
               >
-                {/* Coordinates (only if cell is large enough) */}
+                {/* Coordinates */}
                 {cellSize >= 38 && (
                   <span style={{
                     position: 'absolute', top: 2, left: 4,
@@ -370,7 +395,7 @@ export default function GridEnvironment({
                   </motion.div>
                 )}
 
-                {/* Cliff / Lava */}
+                {/* Cliff */}
                 {cliff && !obs && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -381,7 +406,7 @@ export default function GridEnvironment({
                   </motion.div>
                 )}
 
-                {/* Mud / Swamp */}
+                {/* Mud */}
                 {mudTile && !obs && !cliff && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -392,7 +417,7 @@ export default function GridEnvironment({
                   </motion.div>
                 )}
 
-                {/* Ice / Slippery */}
+                {/* Ice */}
                 {iceTile && !obs && !cliff && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -403,7 +428,7 @@ export default function GridEnvironment({
                   </motion.div>
                 )}
 
-                {/* Portal / Wormhole */}
+                {/* Portal */}
                 {pInfo.isPortal && !obs && !cliff && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -423,15 +448,10 @@ export default function GridEnvironment({
                             : (portals.length > 1 ? `OUT #${pInfo.index + 1}` : 'PORTAL OUT')}
                       </span>
                     )}
-                    {cellSize < 54 && cellSize >= 32 && (
-                      <span style={{ fontSize: 7, fontWeight: 800, color: '#6a1b9a', textTransform: 'uppercase' }}>
-                        {pInfo.isPending ? 'IN...' : pInfo.isEntry ? 'IN' : 'OUT'}
-                      </span>
-                    )}
                   </motion.div>
                 )}
 
-                {/* Door (Locked or Unlocked) */}
+                {/* Door */}
                 {dInfo.isDoor && !obs && !cliff && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -450,24 +470,13 @@ export default function GridEnvironment({
                       }}>
                         {dInfo.isPending
                           ? 'DOOR...'
-                          : (dInfo.isUnlocked || policyKeyView === 1)
-                            ? (doors.length > 1 ? `OPEN #${dInfo.index + 1}` : 'OPEN')
-                            : (doors.length > 1 ? `DOOR #${dInfo.index + 1}` : 'DOOR')}
-                      </span>
-                    )}
-                    {cellSize < 54 && cellSize >= 32 && (
-                      <span style={{
-                        fontSize: 7, fontWeight: 800,
-                        color: (dInfo.isUnlocked || policyKeyView === 1) ? '#16a34a' : '#b45309',
-                        textTransform: 'uppercase'
-                      }}>
-                        {(dInfo.isUnlocked || policyKeyView === 1) ? 'OPEN' : 'DOOR'}
+                          : (dInfo.isUnlocked || policyKeyView === 1) ? 'OPEN' : 'DOOR'}
                       </span>
                     )}
                   </motion.div>
                 )}
 
-                {/* Key (To Unlock Door) */}
+                {/* Key */}
                 {dInfo.isKey && !obs && !cliff && (
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
                     className="flex flex-col items-center gap-0.5">
@@ -484,51 +493,61 @@ export default function GridEnvironment({
                         textTransform: 'uppercase', letterSpacing: '-0.02em',
                         opacity: dInfo.isCollected ? 0.6 : 1
                       }}>
-                        {dInfo.isCollected
-                          ? 'GOT KEY'
-                          : (doors.length > 1 ? `KEY #${dInfo.index + 1}` : 'KEY')}
-                      </span>
-                    )}
-                    {cellSize < 54 && cellSize >= 32 && (
-                      <span style={{
-                        fontSize: 7, fontWeight: 800,
-                        color: '#ca8a04',
-                        textTransform: 'uppercase',
-                        opacity: dInfo.isCollected ? 0.6 : 1
-                      }}>
-                        KEY
+                        {dInfo.isCollected ? 'GOT KEY' : 'KEY'}
                       </span>
                     )}
                   </motion.div>
                 )}
 
-                {/* Goal */}
+                {/* Goal 1 */}
                 {goalHere && !obs && !cliff && (
                   <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}
                     className="flex flex-col items-center gap-0.5">
                     <Flag size={iconSize} color="#00c853" strokeWidth={2.4} />
                     {cellSize >= 54 && (
-                      <span style={{ fontSize: 8, fontWeight: 800, color: '#00c853', textTransform: 'uppercase' }}>Goal</span>
+                      <span style={{ fontSize: 8, fontWeight: 800, color: '#00c853', textTransform: 'uppercase' }}>
+                        {mode === 'cooperative' && goal2 ? 'G1 (+100)' : 'Goal (+100)'}
+                      </span>
                     )}
                   </motion.div>
                 )}
 
-                {/* Start label when agent is elsewhere */}
-                {startHere && !agentHere && !obs && !goalHere && !cliff && (
+                {/* Goal 2 (in Co-op) */}
+                {goal2Here && !obs && !cliff && (
+                  <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}
+                    className="flex flex-col items-center gap-0.5">
+                    <Flag size={iconSize} color="#10b981" strokeWidth={2.4} />
+                    {cellSize >= 54 && (
+                      <span style={{ fontSize: 8, fontWeight: 800, color: '#10b981', textTransform: 'uppercase' }}>
+                        G2 (+100)
+                      </span>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Start 1 Label */}
+                {startHere && !agent1Here && !obs && !goalHere && !cliff && (
                   <span style={{ fontSize: Math.max(8, cellSize * 0.16), fontWeight: 700, color: '#0066ff', opacity: 0.6, textTransform: 'uppercase' }}>
-                    Start
+                    {isMultiAgent ? 'Start 1' : 'Start'}
+                  </span>
+                )}
+
+                {/* Start 2 Label */}
+                {start2Here && !agent2Here && !obs && !goalHere && !goal2Here && !cliff && (
+                  <span style={{ fontSize: Math.max(8, cellSize * 0.16), fontWeight: 700, color: '#ea580c', opacity: 0.6, textTransform: 'uppercase' }}>
+                    Start 2
                   </span>
                 )}
 
                 {/* Policy Arrow */}
-                {showPolicyArrows && !isReplayMode && ba && !obs && !cliff && !goalHere && !agentHere && (
+                {showPolicyArrows && !isReplayMode && ba && !obs && !cliff && !goalHere && !goal2Here && !agent1Here && !agent2Here && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="policy-overlay">
-                    {ARROW_MAP[ba]}
+                    {arrowMap[ba]}
                   </motion.div>
                 )}
 
-                {/* Q-value overlay (only when cell size >= 52) */}
-                {showQValues && !isReplayMode && cq && !obs && !cliff && !goalHere && cellSize >= 52 && (
+                {/* Q-value overlay */}
+                {showQValues && !isReplayMode && cq && !obs && !cliff && !goalHere && !goal2Here && cellSize >= 52 && (
                   <div className="q-vals-overlay">
                     <div className={`q-val q-val-up ${ba === 'up' ? 'best' : ''}`}>{cq.up ?? 0}</div>
                     <div className={`q-val q-val-left ${ba === 'left' ? 'best' : ''}`}>{cq.left ?? 0}</div>
@@ -537,23 +556,50 @@ export default function GridEnvironment({
                   </div>
                 )}
 
-                {/* Agent Token */}
+                {/* Agent 1 Token */}
                 <AnimatePresence>
-                  {agentHere && (
+                  {agent1Here && (
                     <motion.div
-                      layoutId="agent"
+                      layoutId="agent1"
                       transition={{ type: 'spring', stiffness: 500, damping: 32 }}
                       className="agent-token"
                       style={{
                         inset: Math.max(2, Math.round(cellSize * 0.08)),
                         background: isReplayMode ? '#ff8f00' : '#0066ff',
-                        boxShadow: isReplayMode ? '0 2px 10px rgba(255,143,0,0.5)' : '0 2px 10px rgba(0,102,255,0.5)'
+                        boxShadow: '0 2px 10px rgba(0,102,255,0.5)',
+                        zIndex: 10,
+                        ...(isMultiAgent && agent2Here ? { width: '48%', left: '2px', right: 'auto' } : {})
                       }}
                     >
-                      <Bot size={Math.max(10, Math.round(cellSize * 0.44))} color="white" strokeWidth={2} />
+                      <Bot size={Math.max(10, Math.round(cellSize * (isMultiAgent && agent2Here ? 0.32 : 0.44)))} color="white" strokeWidth={2} />
                       {cellSize >= 44 && (
                         <span style={{ fontSize: 7, fontWeight: 800, color: 'white', textTransform: 'uppercase', marginTop: 1 }}>
-                          {isReplayMode ? `S${replayStepIndex}` : 'Agent'}
+                          {isMultiAgent ? 'A1' : isReplayMode ? `S${replayStepIndex}` : 'Agent'}
+                        </span>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Agent 2 Token */}
+                <AnimatePresence>
+                  {agent2Here && (
+                    <motion.div
+                      layoutId="agent2"
+                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                      className="agent-token"
+                      style={{
+                        inset: Math.max(2, Math.round(cellSize * 0.08)),
+                        background: '#ea580c',
+                        boxShadow: '0 2px 10px rgba(234,88,12,0.5)',
+                        zIndex: 11,
+                        ...(agent1Here ? { width: '48%', right: '2px', left: 'auto' } : {})
+                      }}
+                    >
+                      <Bot size={Math.max(10, Math.round(cellSize * (agent1Here ? 0.32 : 0.44)))} color="white" strokeWidth={2} />
+                      {cellSize >= 44 && (
+                        <span style={{ fontSize: 7, fontWeight: 800, color: 'white', textTransform: 'uppercase', marginTop: 1 }}>
+                          A2
                         </span>
                       )}
                     </motion.div>
@@ -566,23 +612,20 @@ export default function GridEnvironment({
       </div>
 
       {/* Grid Legend */}
-      <div className="flex items-center gap-4 flex-wrap justify-center pt-1 text-xs">
+      <div className="flex items-center gap-3.5 flex-wrap justify-center pt-1 text-xs">
         {[
-          { color: '#0066ff', label: 'Agent', shadow: 'rgba(0,102,255,0.4)' },
+          { color: '#0066ff', label: isMultiAgent ? 'Agent 1 (Blue)' : 'Agent', shadow: 'rgba(0,102,255,0.4)' },
+          ...(isMultiAgent ? [{ color: '#ea580c', label: 'Agent 2 (Orange)', shadow: 'rgba(234,88,12,0.4)' }] : []),
           { color: '#00c853', label: 'Goal (+100)', shadow: 'rgba(0,200,83,0.4)' },
+          ...(mode === 'cooperative' && goal2 ? [{ color: '#10b981', label: 'Goal 2', shadow: 'rgba(16,185,129,0.4)' }] : []),
           { color: '#ff1744', label: 'Wall', shadow: 'rgba(255,23,68,0.4)' },
-          { color: '#d97706', label: 'Door (Locked)', shadow: 'rgba(217,119,6,0.3)' },
-          { color: '#eab308', label: 'Key (Pick up)', shadow: 'rgba(234,179,8,0.4)' },
-          { color: '#e65100', label: 'Cliff (-50)', shadow: 'rgba(230,81,0,0.4)' },
-          { color: '#8d6e63', label: 'Mud (-5)', shadow: null },
-          { color: '#00bcd4', label: 'Ice (Slip)', shadow: null },
-          { color: '#ab47bc', label: 'Portal', shadow: null },
-          { color: '#ff6d00', label: 'Policy', isArrow: true },
-        ].map(({ color, label, shadow, isArrow }) => (
+          { color: '#d97706', label: 'Door', shadow: null },
+          { color: '#eab308', label: 'Key', shadow: null },
+          { color: '#e65100', label: 'Cliff (-50)', shadow: null },
+          { color: '#00bcd4', label: 'Ice', shadow: null },
+        ].map(({ color, label, shadow }) => (
           <div key={label} className="flex items-center gap-1.5">
-            {isArrow
-              ? <span style={{ fontSize: 14, color, fontWeight: 900 }}>→</span>
-              : <span style={{ width: 10, height: 10, background: color, borderRadius: 3, boxShadow: shadow ? `0 0 6px ${shadow}` : undefined, display: 'inline-block' }} />}
+            <span style={{ width: 10, height: 10, background: color, borderRadius: 3, boxShadow: shadow ? `0 0 6px ${shadow}` : undefined, display: 'inline-block' }} />
             <span style={{ fontSize: 11, fontWeight: 500, color: '#6b6b6b' }}>{label}</span>
           </div>
         ))}

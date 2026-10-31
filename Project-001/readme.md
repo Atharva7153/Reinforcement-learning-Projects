@@ -32,14 +32,23 @@
 
 ## Core Features
 
+- **Multi-Agent Reinforcement Learning (MARL) & Game Modes:**
+  - **Solo Mode (👤):** Single-agent Q-learning across configurable grid environments with stochastic hazards and door/key mechanisms.
+  - **Competitive Race Mode (🏁 2-Agent Duel):** Agent 1 (Blue `#0066ff`) and Agent 2 (Orange `#ea580c`) race to the goal. First agent to arrive wins (+100 reward) while the loser receives step penalties. Dynamic collision detection prevents simultaneous occupancy or path swaps with a bounce-back bounce and penalty.
+  - **Cooperative Team Mode (🤝 2-Agent Team):** Both agents must coordinate and simultaneously reach their respective goals (Goal 1 & Goal 2) to trigger a shared +100 team bonus.
+  - **Live Multi-Agent Duel Scoreboard:** Tracks Agent 1 wins, Agent 2 wins, ties, win-rate percentages, and team completion rates.
+  - **Dual-Line SVG Learning Curves:** Real-time dual convergence graphs comparing Agent 1 and Agent 2 moving averages.
+  - **Synthesized Web Audio SFX:** Dedicated zero-latency synthesizer fanfares for Agent 1 victory, Agent 2 victory, cooperative team success, and physical collision bonks.
+
 - **Interactive In-Grid Environment Builder:**
-  - Place obstacles, reposition the agent's start state, and set goal locations directly via mouse clicks using dedicated toolbar chips (`Agent`, `Goal`, `Wall`, `Door/Key`, `Cliff`, `Mud`, `Ice`, `Portal`, `Erase`).
+  - Place obstacles, reposition the agent's start state, and set goal locations directly via mouse clicks using dedicated toolbar chips (`Agent 1`, `Agent 2`, `Goal 1`, `Goal 2`, `Wall`, `Door/Key`, `Cliff`, `Mud`, `Ice`, `Portal`, `Erase`).
   - **Two-Click Door & Key Tool:** Click 1 drops a locked Door, Click 2 drops its corresponding Key. Doors act as impassable barriers until the agent picks up the key.
   - Adaptive grid sizing (from $3 \times 3$ up to $20 \times 20$) with responsive cell geometry.
 
 - **Augmented MDP State Space & Multi-Policy Visualization:**
   - When doors exist, the agent's state space expands to $(r, c, \text{has\_key})$, demonstrating state space augmentation in MDPs.
   - Interactive **Policy Slice Toggle** (`Need Key (S0)` vs. `Has Key (S1)`) allowing users to watch the entire grid's directional policy arrows dynamically pivot from targeting the key to targeting the goal via the unlocked door.
+  - **Dual-Agent Policy View Toggle:** Switch between Agent 1 and Agent 2 greedy policy direction arrows and Q-table inspectors.
 
 - **Real-Time Visual Overlays:**
   - **Q-Values Overlay:** Displays maximum estimated Q-values inside every state cell in real time.

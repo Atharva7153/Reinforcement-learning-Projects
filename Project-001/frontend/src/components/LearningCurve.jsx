@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { TrendingUp, Zap, Activity, Crosshair, BarChart2 } from 'lucide-react';
+import { TrendingUp, Zap, Activity, BarChart2 } from 'lucide-react';
 
-export default function LearningCurve({ history = [], onSelectEpisode }) {
+export default function LearningCurve({ history = [], onSelectEpisode, mode = 'single' }) {
   const [activeTab, setActiveTab] = useState('reward'); // 'reward' | 'steps' | 'td_error'
   const [hoverIndex, setHoverIndex] = useState(null);
+  const isMultiAgent = mode === 'competitive' || mode === 'cooperative';
 
   if (!history || history.length < 2) {
     return (
@@ -21,22 +22,30 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
   const iW = W - pad.left - pad.right;
   const iH = H - pad.top - pad.bottom;
 
-  // Extract series based on active tab
   let values = [];
   let secondaryValues = [];
+  let agent2Values = [];
   let yLabelFormat = (v) => Math.round(v);
   let chartTitle = '';
-  let primaryColor = '#00c853';
-  let primaryLabel = 'Reward';
+  let primaryColor = isMultiAgent ? '#0066ff' : '#00c853';
+  let primaryLabel = isMultiAgent ? 'A1 Reward' : 'Moving Avg(20)';
 
   if (activeTab === 'reward') {
-    chartTitle = 'Episode Reward & Convergence';
-    values = history.map((h) => h.avgReward ?? h.reward);
-    secondaryValues = history.map((h) => h.reward);
-    primaryColor = '#00c853';
-    primaryLabel = 'Moving Avg(20)';
+    if (isMultiAgent) {
+      chartTitle = mode === 'competitive' ? 'Race Duel Convergence: Agent 1 vs Agent 2' : 'Co-Op Team Convergence';
+      values = history.map((h) => h.avgReward1 ?? h.avgReward ?? h.reward1 ?? h.reward ?? 0);
+      agent2Values = history.map((h) => h.avgReward2 ?? h.reward2 ?? 0);
+      primaryColor = '#0066ff';
+      primaryLabel = 'Agent 1 (Blue)';
+    } else {
+      chartTitle = 'Episode Reward & Convergence';
+      values = history.map((h) => h.avgReward ?? h.reward);
+      secondaryValues = history.map((h) => h.reward);
+      primaryColor = '#00c853';
+      primaryLabel = 'Moving Avg(20)';
+    }
   } else if (activeTab === 'steps') {
-    chartTitle = 'Steps per Episode (Path Optimization)';
+    chartTitle = 'Steps per Episode (Speed & Efficiency)';
     values = history.map((h) => h.steps ?? 100);
     primaryColor = '#0066ff';
     primaryLabel = 'Steps Taken';
@@ -49,7 +58,11 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
     yLabelFormat = (v) => v.toFixed(2);
   }
 
-  const allVals = [...values, ...(secondaryValues.length ? secondaryValues : [])];
+  const allVals = [
+    ...values,
+    ...(secondaryValues.length ? secondaryValues : []),
+    ...(agent2Values.length ? agent2Values : []),
+  ];
   const mn = Math.min(...allVals, activeTab === 'reward' ? -10 : 0);
   const mx = Math.max(...allVals, activeTab === 'reward' ? 10 : 1);
   const range = mx - mn || 1;
@@ -60,6 +73,9 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
   const primaryPts = values.map((v, i) => `${getX(i)},${getY(v)}`).join(' ');
   const secondaryPts = secondaryValues.length
     ? secondaryValues.map((v, i) => `${getX(i)},${getY(v)}`).join(' ')
+    : null;
+  const agent2Pts = agent2Values.length
+    ? agent2Values.map((v, i) => `${getX(i)},${getY(v)}`).join(' ')
     : null;
 
   // Horizontal gridlines
@@ -118,13 +134,27 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
             ))}
           </div>
         </div>
+
+        {/* Multi-Agent Legend in Reward Tab */}
+        {isMultiAgent && activeTab === 'reward' && (
+          <div className="flex items-center gap-4 mt-2 pt-2 border-t border-neutral-100 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span style={{ width: 10, height: 10, background: '#0066ff', borderRadius: 2, display: 'inline-block' }} />
+              <span className="font-semibold text-blue-700 text-[11px]">Agent 1 (Blue)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span style={{ width: 10, height: 10, background: '#ea580c', borderRadius: 2, display: 'inline-block' }} />
+              <span className="font-semibold text-orange-700 text-[11px]">Agent 2 (Orange)</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SVG Canvas Area */}
       <div className="card-section relative" style={{ padding: '12px 14px 16px' }}>
         <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] sm:text-xs font-mono text-neutral-500 mb-2">
           <span className="font-semibold text-neutral-800">{chartTitle}</span>
-          <span className="text-[11px] text-neutral-400">Hover graph to inspect point · Click to replay</span>
+          <span className="text-[11px] text-neutral-400">Hover point to inspect · Click to replay</span>
         </div>
 
         <svg
@@ -138,7 +168,7 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
             }
           }}
         >
-          {/* Subtle horizontal grid lines */}
+          {/* Grid lines */}
           {gridLines.map(({ y, val }) => (
             <g key={y}>
               <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="#f0eeeb" strokeDasharray="3 3" />
@@ -151,12 +181,24 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
           {/* X axis */}
           <line x1={pad.left} y1={pad.top + iH} x2={W - pad.right} y2={pad.top + iH} stroke="#e5e5e5" />
 
-          {/* Secondary line (Raw episode rewards when on reward tab) */}
+          {/* Secondary line (Raw solo rewards) */}
           {secondaryPts && (
             <polyline fill="none" stroke="#d5d5d5" strokeWidth={1.2} points={secondaryPts} />
           )}
 
-          {/* Primary Trend Line */}
+          {/* Agent 2 Line in Multi-agent */}
+          {agent2Pts && (
+            <polyline
+              fill="none"
+              stroke="#ea580c"
+              strokeWidth={2.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points={agent2Pts}
+            />
+          )}
+
+          {/* Primary Trend Line (Agent 1 or Solo) */}
           <polyline
             fill="none"
             stroke={primaryColor}
@@ -166,7 +208,7 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
             points={primaryPts}
           />
 
-          {/* Hover Crosshair and Tooltip Point */}
+          {/* Hover Crosshair */}
           {hoverIndex !== null && (
             <g>
               <line
@@ -186,6 +228,16 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
                 stroke="white"
                 strokeWidth={2}
               />
+              {agent2Values.length > hoverIndex && (
+                <circle
+                  cx={getX(hoverIndex)}
+                  cy={getY(agent2Values[hoverIndex])}
+                  r={5.5}
+                  fill="#ea580c"
+                  stroke="white"
+                  strokeWidth={2}
+                />
+              )}
             </g>
           )}
 
@@ -219,23 +271,44 @@ export default function LearningCurve({ history = [], onSelectEpisode }) {
               <span className="font-bold text-white">Episode #{hoveredData.episode}</span>
               <span className="text-[10px] text-amber-300">Click to replay</span>
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <span>{primaryLabel}:</span>
-              <strong style={{ color: primaryColor }}>
-                {activeTab === 'reward'
-                  ? hoveredData.avgReward ?? hoveredData.reward
-                  : activeTab === 'steps'
-                  ? `${hoveredData.steps ?? 100} steps`
-                  : (hoveredData.avg_td_error ?? 0).toFixed(3)}
-              </strong>
-            </div>
-            {activeTab === 'reward' && hoveredData.reward !== undefined && (
-              <div className="flex items-center justify-between gap-4 text-neutral-400 text-[11px]">
-                <span>Ep Reward:</span>
-                <span className={hoveredData.reward > 0 ? 'text-emerald-400 font-bold' : 'text-red-400'}>
-                  {hoveredData.reward}
-                </span>
-              </div>
+
+            {isMultiAgent && activeTab === 'reward' ? (
+              <>
+                <div className="flex items-center justify-between gap-4 text-blue-400 font-semibold">
+                  <span>Agent 1 (Blue):</span>
+                  <strong>{hoveredData.reward1 ?? hoveredData.reward}</strong>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-orange-400 font-semibold">
+                  <span>Agent 2 (Orange):</span>
+                  <strong>{hoveredData.reward2 ?? 0}</strong>
+                </div>
+                {hoveredData.winner !== undefined && hoveredData.winner !== null && (
+                  <div className="text-[11px] text-neutral-300 border-t border-neutral-800 pt-1">
+                    Winner: {hoveredData.winner === 1 ? '🤖 Agent 1' : hoveredData.winner === 2 ? '🤖 Agent 2' : 'Tie'}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-4">
+                  <span>{primaryLabel}:</span>
+                  <strong style={{ color: primaryColor }}>
+                    {activeTab === 'reward'
+                      ? hoveredData.avgReward ?? hoveredData.reward
+                      : activeTab === 'steps'
+                      ? `${hoveredData.steps ?? 100} steps`
+                      : (hoveredData.avg_td_error ?? 0).toFixed(3)}
+                  </strong>
+                </div>
+                {activeTab === 'reward' && hoveredData.reward !== undefined && (
+                  <div className="flex items-center justify-between gap-4 text-neutral-400 text-[11px]">
+                    <span>Ep Reward:</span>
+                    <span className={hoveredData.reward > 0 ? 'text-emerald-400 font-bold' : 'text-red-400'}>
+                      {hoveredData.reward}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
