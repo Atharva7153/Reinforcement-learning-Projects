@@ -6,52 +6,41 @@ export default function EpisodeHistory({
   sessionId, currentEpisode, isTraining,
   onStartReplay, onStopReplay,
   isReplayMode, replayStepIndex, onStepChange,
+  isReplayPlaying = false, onTogglePlay = null,
+  replaySpeed = 200, onSpeedChange = null,
   externalTargetEpisode = null,
 }) {
   const [targetEpisode, setTargetEpisode] = useState('');
   const [epData, setEpData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(200);
-  const timerRef = useRef(null);
 
   useEffect(() => {
     if (externalTargetEpisode && externalTargetEpisode >= 1 && externalTargetEpisode !== Number(targetEpisode)) {
       setTargetEpisode(String(externalTargetEpisode));
-      loadEpisode(externalTargetEpisode);
+      loadEpisode(externalTargetEpisode, false);
     }
   }, [externalTargetEpisode]);
 
-  useEffect(() => {
-    if (isPlaying && epData?.path) {
-      const max = epData.path.length - 1;
-      timerRef.current = setInterval(() => {
-        onStepChange(prev => {
-          if (prev >= max) { setIsPlaying(false); return max; }
-          return prev + 1;
-        });
-      }, speed);
-    } else {
-      clearInterval(timerRef.current);
-    }
-    return () => clearInterval(timerRef.current);
-  }, [isPlaying, epData, speed, onStepChange]);
-
-  const loadEpisode = async (n) => {
+  const loadEpisode = async (n, autoPlay = false) => {
     if (!sessionId || !n || n < 1) return;
     setLoading(true);
     try {
       const data = await getEpisodeDetail(sessionId, n);
       setEpData(data);
-      setIsPlaying(false);
-      if (onStartReplay) onStartReplay(data.path, data.trajectory);
+      if (onStartReplay) onStartReplay(data.path, data.trajectory, n);
+      // Auto-scroll to top grid
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (autoPlay && onTogglePlay) {
+        setTimeout(() => {
+          onTogglePlay(false);
+        }, 400);
+      }
     } catch {
       setEpData(null);
     } finally { setLoading(false); }
   };
 
   const handleExit = () => {
-    setIsPlaying(false);
     setEpData(null);
     if (onStopReplay) onStopReplay();
   };
@@ -84,7 +73,7 @@ export default function EpisodeHistory({
       </div>
 
       <div className="card-section">
-        {/* Input + Inspect button */}
+        {/* Input + Inspect & Play buttons */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', gap: 6,
@@ -108,10 +97,21 @@ export default function EpisodeHistory({
           <button
             type="button"
             disabled={isTraining || !currentEpisode || !targetEpisode || Number(targetEpisode) < 1 || Number(targetEpisode) > currentEpisode || loading}
-            onClick={() => loadEpisode(Number(targetEpisode))}
-            className="btn btn-black"
+            onClick={() => loadEpisode(Number(targetEpisode), false)}
+            className="btn btn-white"
+            style={{ fontSize: 12, padding: '8px 12px' }}
           >
             {loading ? 'Loading…' : 'Inspect'}
+          </button>
+          <button
+            type="button"
+            disabled={isTraining || !currentEpisode || !targetEpisode || Number(targetEpisode) < 1 || Number(targetEpisode) > currentEpisode || loading}
+            onClick={() => loadEpisode(Number(targetEpisode), true)}
+            className="btn btn-black"
+            style={{ fontSize: 12, padding: '8px 14px' }}
+          >
+            <Play size={12} fill="white" />
+            Play Replay
           </button>
         </div>
 
@@ -120,7 +120,7 @@ export default function EpisodeHistory({
           <span style={{ fontSize: 11, color: '#bbb', fontWeight: 600, alignSelf: 'center' }}>Jump:</span>
           {QUICK_JUMPS.map(n => (
             <button key={n} type="button" disabled={isTraining}
-              onClick={() => { setTargetEpisode(String(n)); loadEpisode(n); }}
+              onClick={() => { setTargetEpisode(String(n)); loadEpisode(n, false); }}
               style={{
                 padding: '4px 10px', borderRadius: 7, fontSize: 11,
                 fontWeight: 700, fontFamily: 'JetBrains Mono',
@@ -132,7 +132,7 @@ export default function EpisodeHistory({
           ))}
           {currentEpisode > 0 && !QUICK_JUMPS.includes(currentEpisode) && (
             <button type="button" disabled={isTraining}
-              onClick={() => { setTargetEpisode(String(currentEpisode)); loadEpisode(currentEpisode); }}
+              onClick={() => { setTargetEpisode(String(currentEpisode)); loadEpisode(currentEpisode, false); }}
               style={{
                 padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 700,
                 fontFamily: 'JetBrains Mono', border: '1.5px solid #b35c00',
@@ -199,23 +199,24 @@ export default function EpisodeHistory({
             {/* Playback controls */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => onStepChange(0)} type="button" className="btn btn-ghost btn-sm">
+                <button onClick={() => onStepChange(0)} type="button" className="btn btn-ghost btn-sm" title="Reset to start">
                   <SkipBack size={13} />
                 </button>
-                <button onClick={() => {
-                  if (replayStepIndex >= maxSteps) onStepChange(0);
-                  setIsPlaying(p => !p);
-                }} type="button"
+                <button
+                  onClick={() => {
+                    if (onTogglePlay) onTogglePlay(true);
+                  }}
+                  type="button"
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '8px 14px', borderRadius: 8, border: 'none',
                     background: '#ff8f00', color: 'white', fontWeight: 700, fontSize: 12,
                     cursor: 'pointer', boxShadow: '0 2px 8px rgba(255,143,0,0.3)',
                   }}>
-                  {isPlaying ? <Pause size={13} fill="white" /> : <Play size={13} fill="white" />}
-                  {isPlaying ? 'Pause' : 'Play Path'}
+                  {isReplayPlaying ? <Pause size={13} fill="white" /> : <Play size={13} fill="white" />}
+                  {isReplayPlaying ? 'Pause' : 'Play Path'}
                 </button>
-                <button onClick={() => onStepChange(p => Math.min(maxSteps, p + 1))} type="button" className="btn btn-ghost btn-sm">
+                <button onClick={() => onStepChange(p => Math.min(maxSteps, p + 1))} type="button" className="btn btn-ghost btn-sm" title="Next step">
                   <SkipForward size={13} />
                 </button>
               </div>
@@ -223,13 +224,13 @@ export default function EpisodeHistory({
               {/* Speed */}
               <div style={{ display: 'flex', gap: 4, fontSize: 11, fontFamily: 'JetBrains Mono' }}>
                 {[{ label: 'Fast', ms: 80 }, { label: '1×', ms: 200 }, { label: 'Slow', ms: 500 }].map(({ label, ms }) => (
-                  <button key={ms} onClick={() => setSpeed(ms)} type="button"
+                  <button key={ms} onClick={() => onSpeedChange && onSpeedChange(ms)} type="button"
                     style={{
                       padding: '5px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700,
                       border: '1.5px solid', cursor: 'pointer',
-                      borderColor: speed === ms ? '#0a0a0a' : '#e5e5e5',
-                      background: speed === ms ? '#0a0a0a' : 'white',
-                      color: speed === ms ? 'white' : '#6b6b6b',
+                      borderColor: replaySpeed === ms ? '#0a0a0a' : '#e5e5e5',
+                      background: replaySpeed === ms ? '#0a0a0a' : 'white',
+                      color: replaySpeed === ms ? 'white' : '#6b6b6b',
                     }}>
                     {label}
                   </button>

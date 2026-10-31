@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Cpu, Wifi, AlertCircle } from 'lucide-react';
+import { Cpu, Wifi, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import GridEnvironment from './components/GridEnvironment';
 import ControlPanel from './components/ControlPanel';
 import TrainingStats from './components/TrainingStats';
@@ -8,6 +8,17 @@ import LearningCurve from './components/LearningCurve';
 import CellInspector from './components/CellInspector';
 import ConfigPanel from './components/ConfigPanel';
 import EpisodeHistory from './components/EpisodeHistory';
+import {
+  isSoundEnabled,
+  toggleSound,
+  playStepSound,
+  playGoalSound,
+  playCliffSound,
+  playPortalSound,
+  playMudSound,
+  playIceSound,
+  playClickSound,
+} from './utils/sound';
 import {
   createEnvironment,
   startTraining, pauseTraining, resumeTraining, resetTraining,
@@ -47,6 +58,7 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [activeTool, setActiveTool] = useState('wall');
   const [pendingPortalEntry, setPendingPortalEntry] = useState(null);
+  const [soundOn, setSoundOn] = useState(isSoundEnabled());
 
   const handleSelectTool = (tool) => {
     setActiveTool(tool);
@@ -69,9 +81,40 @@ export default function App() {
   const [replayPath, setReplayPath] = useState([]);
   const [replayStepIndex, setReplayStepIndex] = useState(0);
   const [selectedReplayEpisode, setSelectedReplayEpisode] = useState(null);
+  const [isReplayPlaying, setIsReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(200);
 
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+
+  const playTileSound = useCallback((r, c) => {
+    if (!isSoundEnabled()) return;
+    if (config.goal[0] === r && config.goal[1] === c) {
+      playGoalSound();
+      return;
+    }
+    if ((config.cliffs || []).some(([cr, cc]) => cr === r && cc === c)) {
+      playCliffSound();
+      return;
+    }
+    if (
+      (config.portals || []).some(
+        ([r1, c1, r2, c2]) => (r1 === r && c1 === c) || (r2 === r && c2 === c)
+      )
+    ) {
+      playPortalSound();
+      return;
+    }
+    if ((config.mud || []).some(([mr, mc]) => mr === r && mc === c)) {
+      playMudSound();
+      return;
+    }
+    if ((config.ice || []).some(([ir, ic]) => ir === r && ic === c)) {
+      playIceSound();
+      return;
+    }
+    playStepSound();
+  }, [config]);
 
   const handleMsg = useCallback((msg) => {
     switch (msg.type) {
@@ -93,6 +136,9 @@ export default function App() {
         setLastReward(msg.reward);
         setEpsilon(msg.epsilon);
         setAgentPosition(msg.agent_position);
+        if (delayMs >= 20) {
+          playStepSound(0.12);
+        }
         break;
       case 'episode_end':
         setCurrentEpisode(msg.episode);
@@ -103,6 +149,9 @@ export default function App() {
         if (msg.best_actions) setBestActions(msg.best_actions);
         if (msg.state_values) setStateValues(msg.state_values);
         if (msg.visit_counts) setVisitCounts(msg.visit_counts);
+        if (msg.episode_reward >= (config.goal_reward * 0.8)) {
+          playGoalSound(0.25);
+        }
         setHistory((prev) => [
           ...prev.slice(-150),
           {
@@ -131,17 +180,21 @@ export default function App() {
         setCurrentStep(0);
         setHistory([]);
         setIsReplayMode(false);
+        setIsReplayPlaying(false);
         break;
       case 'policy_demo_start':
         setIsPolicyRunning(true);
         setIsReplayMode(false);
         setAgentPosition(msg.start);
+        playStepSound(0.2);
         break;
       case 'policy_demo_step':
         setAgentPosition(msg.agent_position);
+        playTileSound(msg.agent_position[0], msg.agent_position[1]);
         break;
       case 'policy_demo_finished':
         setIsPolicyRunning(false);
+        if (msg.reached_goal) playGoalSound();
         break;
       default:
         break;
@@ -552,28 +605,76 @@ export default function App() {
     }
   };
 
-  const handleStartReplay = (path, trajectory) => {
+  const handleStartReplay = (path, trajectory, epNumber) => {
     setIsReplayMode(true);
+    setIsReplayPlaying(false);
     setReplayPath(path || []);
     setReplayStepIndex(0);
+    if (epNumber) setSelectedReplayEpisode(epNumber);
     if (path?.length > 0) setAgentPosition(path[0]);
   };
 
   const handleStopReplay = () => {
     setIsReplayMode(false);
+    setIsReplayPlaying(false);
     setReplayPath([]);
     setReplayStepIndex(0);
     setSelectedReplayEpisode(null);
     setAgentPosition(config.start);
   };
 
-  const handleReplayStep = (valOrFn) => {
+  const handleReplayStep = useCallback((valOrFn) => {
     setReplayStepIndex((prev) => {
       const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn;
-      if (replayPath?.[next]) setAgentPosition(replayPath[next]);
+      if (replayPath?.[next]) {
+        const [r, c] = replayPath[next];
+        setAgentPosition([r, c]);
+        if (next > 0 && next !== prev) {
+          playTileSound(r, c);
+        }
+      }
       return next;
     });
-  };
+  }, [replayPath, playTileSound]);
+
+  const handleToggleReplayPlay = useCallback((withScrollDelay = false) => {
+    if (isReplayPlaying) {
+      setIsReplayPlaying(false);
+      return;
+    }
+
+    // Auto-scroll to top grid
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (replayPath && replayStepIndex >= replayPath.length - 1) {
+      handleReplayStep(0);
+    }
+
+    if (withScrollDelay) {
+      setTimeout(() => {
+        setIsReplayPlaying(true);
+      }, 400);
+    } else {
+      setIsReplayPlaying(true);
+    }
+  }, [isReplayPlaying, replayPath, replayStepIndex, handleReplayStep]);
+
+  useEffect(() => {
+    if (!isReplayPlaying || !replayPath || replayPath.length === 0) return;
+
+    const max = replayPath.length - 1;
+    const interval = setInterval(() => {
+      handleReplayStep((prev) => {
+        if (prev >= max) {
+          setIsReplayPlaying(false);
+          return max;
+        }
+        return prev + 1;
+      });
+    }, replaySpeed);
+
+    return () => clearInterval(interval);
+  }, [isReplayPlaying, replayPath, replaySpeed, handleReplayStep]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f7f7f5', fontFamily: 'Inter, sans-serif' }}>
@@ -623,6 +724,29 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={() => setSoundOn(toggleSound())}
+              title={soundOn ? 'Sound Effects: ON (Click to mute)' : 'Sound Effects: MUTED (Click to enable)'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 13px',
+                borderRadius: 100,
+                background: soundOn ? '#f5f5f5' : '#fff0f0',
+                border: `1.5px solid ${soundOn ? '#e5e5e5' : '#ffc0c0'}`,
+                fontSize: 12,
+                fontWeight: 700,
+                color: soundOn ? '#0a0a0a' : '#cc0000',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {soundOn ? <Volume2 size={14} color="#0a0a0a" /> : <VolumeX size={14} color="#cc0000" />}
+              <span>{soundOn ? 'SFX ON' : 'SFX MUTED'}</span>
+            </button>
+
             <div
               style={{
                 display: 'flex',
@@ -781,6 +905,11 @@ export default function App() {
                 replayPath={replayPath}
                 replayStepIndex={replayStepIndex}
                 isReplayMode={isReplayMode}
+                selectedReplayEpisode={selectedReplayEpisode}
+                isReplayPlaying={isReplayPlaying}
+                onToggleReplayPlay={() => handleToggleReplayPlay(false)}
+                onReplayStepChange={handleReplayStep}
+                onExitReplay={handleStopReplay}
               />
             </div>
           </div>
@@ -788,7 +917,10 @@ export default function App() {
           {/* Multi-Graph Interactive Analytics */}
           <LearningCurve
             history={history}
-            onSelectEpisode={(ep) => setSelectedReplayEpisode(ep)}
+            onSelectEpisode={(ep) => {
+              setSelectedReplayEpisode(ep);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
 
           {/* Episode History & Replayer */}
@@ -801,6 +933,10 @@ export default function App() {
             isReplayMode={isReplayMode}
             replayStepIndex={replayStepIndex}
             onStepChange={handleReplayStep}
+            isReplayPlaying={isReplayPlaying}
+            onTogglePlay={handleToggleReplayPlay}
+            replaySpeed={replaySpeed}
+            onSpeedChange={setReplaySpeed}
             externalTargetEpisode={selectedReplayEpisode}
           />
         </div>

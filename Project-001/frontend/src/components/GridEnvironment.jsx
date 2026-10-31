@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit } from 'lucide-react';
+import { Flag, Bot, Ban, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, History, Flame, Waves, Snowflake, Orbit, Play, Pause, SkipBack, SkipForward, X } from 'lucide-react';
 
 export default function GridEnvironment({
   rows, cols, start, goal,
@@ -10,6 +10,11 @@ export default function GridEnvironment({
   activeTool, onCellClick, selectedCell,
   showQValues, showPolicyArrows, showValueHeatmap = false, showVisitHeatmap = false,
   isTraining, replayPath = [], replayStepIndex = 0, isReplayMode = false,
+  selectedReplayEpisode = null,
+  isReplayPlaying = false,
+  onToggleReplayPlay = null,
+  onReplayStepChange = null,
+  onExitReplay = null,
 }) {
   const agent = agentPosition || start;
   const isAgent = (r, c) => agent[0] === r && agent[1] === c;
@@ -77,16 +82,140 @@ export default function GridEnvironment({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full">
+    <div className="flex flex-col items-center gap-3 w-full">
       {isReplayMode && (
         <motion.div
-          initial={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold"
-          style={{ background: '#fff8e8', color: '#b35c00', border: '1.5px solid #ffd990' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '7px 14px',
+            borderRadius: 10,
+            background: 'white',
+            border: '1.5px solid #ffd990',
+            boxShadow: '0 2px 8px rgba(179,92,0,0.08)',
+            width: '100%',
+            maxWidth: 560,
+          }}
         >
-          <History size={12} />
-          Replay Mode — Viewing historical trajectory
+          {/* Episode Badge & Steps */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                background: '#fff8e8',
+                color: '#b35c00',
+                border: '1px solid #ffd990',
+                padding: '2px 8px',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 800,
+                fontFamily: 'JetBrains Mono',
+              }}
+            >
+              EP #{selectedReplayEpisode || '—'}
+            </span>
+            <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: '#6b6b6b', fontWeight: 600 }}>
+              Step {replayStepIndex} / {Math.max(0, replayPath.length - 1)}
+            </span>
+          </div>
+
+          {/* Controls: Reset, Play/Pause, Next, Slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => onReplayStepChange && onReplayStepChange(0)}
+              title="Reset to Step 0"
+              style={{
+                background: '#f5f5f5',
+                border: '1px solid #e5e5e5',
+                borderRadius: 6,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <SkipBack size={12} color="#444" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onToggleReplayPlay && onToggleReplayPlay(false)}
+              title={isReplayPlaying ? 'Pause' : 'Play Path'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: '#ff8f00',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(255,143,0,0.3)',
+              }}
+            >
+              {isReplayPlaying ? <Pause size={11} fill="white" /> : <Play size={11} fill="white" />}
+              <span>{isReplayPlaying ? 'Pause' : 'Play'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onReplayStepChange &&
+                onReplayStepChange((p) => Math.min(replayPath.length - 1, p + 1))
+              }
+              title="Next Step"
+              style={{
+                background: '#f5f5f5',
+                border: '1px solid #e5e5e5',
+                borderRadius: 6,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <SkipForward size={12} color="#444" />
+            </button>
+
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, replayPath.length - 1)}
+              value={replayStepIndex}
+              onChange={(e) => onReplayStepChange && onReplayStepChange(Number(e.target.value))}
+              style={{ width: 85, accentColor: '#ff8f00', cursor: 'pointer' }}
+            />
+          </div>
+
+          {/* Exit Replay */}
+          <button
+            type="button"
+            onClick={onExitReplay}
+            title="Exit Replay"
+            style={{
+              background: '#fff0f0',
+              border: '1px solid #ffc0c0',
+              color: '#cc0000',
+              borderRadius: 6,
+              padding: '3px 8px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+            }}
+          >
+            <X size={11} />
+            <span>Exit</span>
+          </button>
         </motion.div>
       )}
 
