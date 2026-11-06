@@ -1,103 +1,123 @@
 # RL-proj — Reinforcement Learning Projects Suite
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-black?style=flat)](#license)
 
-A modular monorepo dedicated to reinforcement learning algorithms, simulation environments, and real-time interactive visualizers. This repository bridges the gap between theoretical RL formulations and practical, transparent software engineering—progressing from fundamental tabular methods to deep reinforcement learning architectures.
+A modular monorepo dedicated to reinforcement learning algorithms, interactive simulation environments, and real-time observability visualizers. This repository bridges the gap between theoretical RL formulations and practical, transparent software engineering—progressing from discrete tabular MDPs to continuous kinematic control and deep reinforcement learning architectures.
 
 ---
 
-## Repository Map
+## 🗺️ Repository Map
 
 ```
 RL-proj/
 ├── Project-001/                  # [Active] RL Playground — Q-Learning GridWorld Visualizer
-│   ├── backend/                  # FastAPI async engine & RL core
-│   │   ├── rl/                   # Environment, Q-learning agent, training loop
+│   ├── backend/                  # FastAPI async engine, MARL core & sessions
+│   │   ├── rl/                   # Environment (MDP), Q-agent, async training loop
 │   │   ├── models/               # Pydantic schemas & validation
 │   │   ├── sessions/             # In-memory session manager & WebSocket pool
-│   │   └── main.py               # REST API & WebSocket endpoints
+│   │   └── main.py               # REST API, WebSocket & static file serving
 │   ├── frontend/                 # React 19 SPA (Vite + Tailwind CSS v4 + Framer Motion)
 │   │   └── src/components/       # Grid visualizer, telemetry, curve, inspector
-│   ├── Dockerfile                # Multi-stage production container
-│   └── readme.md                 # Project-specific documentation
+│   ├── Dockerfile                # Multi-stage production container for Render / Docker
+│   └── readme.md                 # Project-001 documentation
 │
-└── readme.md                     # Root suite documentation (this file)
+├── Project-002/                  # [Active] AutoStop RL — Autonomous 2D Car Braking Playground
+│   ├── backend/                  # FastAPI async physics simulation & Q-learning engine
+│   │   ├── rl/                   # 2D Kinematics env, tabular Q-agent, state discretization
+│   │   ├── models/               # Pydantic schemas for physics, telemetry & hyperparams
+│   │   ├── session_manager.py    # Multi-client async session trainer & WebSocket broadcaster
+│   │   └── main.py               # REST API, WebSocket streaming & static SPA server
+│   ├── frontend/                 # Modern React 19 Light Theme SPA (Vite + Tailwind v4)
+│   │   └── src/components/       # 2D Canvas track, LIDAR radar, telemetry HUD, policy heatmap
+│   ├── Dockerfile                # Multi-stage production container for 1-click Render deployment
+│   ├── .dockerignore             # Clean build exclusions
+│   └── readme.md                 # Project-002 comprehensive documentation
+│
+└── readme.md                     # Monorepo suite documentation (this file)
 ```
 
 ---
 
-## Projects Catalog
+## 📚 Projects Catalog
 
 | Project ID | Title | Algorithmic Core | State Space | Action Space | Tech Stack | Status |
 |---|---|---|---|---|---|:---:|
-| **[Project-001](file:///Users/atharvasharna/Desktop/RL-proj/Project-001/readme.md)** | **RL Playground: GridWorld** | Tabular Q-Learning ($\epsilon$-greedy TD) | Discrete 2D Grid ($N \times M$) | Discrete 4-Way (`up`, `down`, `left`, `right`) | Python, FastAPI, WebSockets, React 19, Tailwind CSS | **Completed & Production Ready** |
-| **Project-002** | *Deep Q-Networks (DQN)* | Experience Replay & Target Networks | High-Dimensional / Continuous | Discrete Actions | PyTorch, Gymnasium, FastAPI | *Planned* |
-| **Project-003** | *Policy Gradients (REINFORCE)* | Monte Carlo Policy Gradients | Continuous / Vector State | Discrete & Continuous | PyTorch, NumPy, WebSockets | *Planned* |
-| **Project-004** | *Actor-Critic (PPO / A2C)* | Generalized Advantage Estimation (GAE) | Continuous Environments | Continuous Action Spaces | PyTorch, FastAPI, Three.js | *Planned* |
+| **[Project-001](file:///Users/atharvasharna/Desktop/RL-proj/Project-001/readme.md)** | **RL Playground: GridWorld** | Tabular Q-Learning ($\epsilon$-greedy TD) | Discrete 2D Grid ($N \times M \times \text{has\_key}$) | Discrete 4-Way (`up`, `down`, `left`, `right`) | Python, FastAPI, WebSockets, React 19, Tailwind CSS | **Completed & Production Ready** |
+| **[Project-002](file:///Users/atharvasharna/Desktop/RL-proj/Project-002/readme.md)** | **AutoStop RL: 2D Car Braking** | Discretized Tabular Q-Learning | Continuous Kinematics $(d, v) \to 19 \times 10$ Bins | 3 Actions: `Brake`, `Accelerate`, `Maintain` | Python, FastAPI, WebSockets, React 19, Canvas, Tailwind v4 | **Completed & Production Ready** |
+| **Project-003** | *Deep Q-Networks (DQN)* | Experience Replay & Target Networks | Continuous / Classic Control (CartPole) | Discrete Action Space | PyTorch, Gymnasium, FastAPI | *Planned* |
+| **Project-004** | *Policy Gradients (REINFORCE / PPO)* | Generalized Advantage Estimation (GAE) | Continuous High-Dimensional | Continuous Torque Control | PyTorch, FastAPI, Three.js | *Planned* |
 
 ---
 
-## Spotlight: Project-001 (RL Playground)
+## 🚗 Spotlight: Project-002 (AutoStop RL Playground)
 
-[**Project-001**](file:///Users/atharvasharna/Desktop/RL-proj/Project-001/readme.md) is an interactive, full-stack visualizer and training sandbox for tabular Q-learning. It provides real-time transparency into how an agent explores an environment, updates its state-action value table ($Q$), and converges toward the optimal Bellman policy.
+[**Project-002**](file:///Users/atharvasharna/Desktop/RL-proj/Project-002/readme.md) is an interactive, light-themed reinforcement learning laboratory where an autonomous 2D car learns to come to an optimal emergency stop right before a rigid barrier.
 
 ```mermaid
 flowchart LR
-    subgraph Browser ["Frontend (React 19 + Framer Motion)"]
-        UI["Interactive GridWorld & Controls"]
-        Stats["Telemetry & Convergence Curve"]
-        Replay["Episode Replay Engine"]
+    subgraph Frontend ["React 19 Frontend (Port 5174 / 8000)"]
+        Canvas["2D Canvas Physics Track (LIDAR + Particles)"]
+        HUD["Telemetry HUD (Velocity, Proximity, Actions)"]
+        Heatmap["2D Policy Heatmap & Live Car Tracker"]
+        Cockpit["Manual Driver Cockpit (Keyboard Controls)"]
     end
 
-    subgraph Server ["Backend (FastAPI + AsyncIO)"]
-        WS["WebSocket Stream Engine"]
-        REST["REST API Controllers"]
-        Manager["Session & Connection Manager"]
-        Trainer["Async Training Loop Task"]
+    subgraph Backend ["FastAPI Backend (Port 8000)"]
+        WS["WebSocket Stream Engine (/ws/{id})"]
+        REST["REST API Controllers (/api/...)"]
+        Trainer["Async Simulation & Turbo Worker"]
     end
 
-    subgraph RL ["RL Core"]
-        Env["GridEnvironment (MDP)"]
-        Agent["QLearningAgent (Q-Table & TD)"]
+    subgraph Core ["RL Physics & Agent Core"]
+        Env["CarStopEnv (Kinematics & Sensors)"]
+        Agent["QLearningAgent (19x10 State Matrix)"]
     end
 
-    UI <-->|Bidirectional WS| WS
-    UI -->|Session Config & Commands| REST
-    REST --> Manager
-    WS --> Manager
-    Manager --> Trainer
+    Frontend <-->|Real-Time Telemetry Stream| WS
+    Frontend -->|Commands & Hyperparameters| REST
+    WS --> Trainer
+    REST --> Trainer
     Trainer --> Env
     Trainer --> Agent
 ```
 
-### Core Capabilities of Project-001
-
-- **Multi-Agent Reinforcement Learning (MARL) Game Modes:**
-  - **Solo Mode (👤):** Single-agent Q-learning across configurable grid environments with stochastic hazards and door/key mechanisms.
-  - **Competitive Race Mode (🏁 2-Agent Duel):** Agent 1 (Blue) and Agent 2 (Orange) race head-to-head to reach the goal first, featuring real-time physical collision handling (bounce-back and penalty), duel scoreboards, and dual convergence lines.
-  - **Cooperative Team Mode (🤝 2-Agent Team):** Both agents must coordinate to reach individual goals (Goal 1 & Goal 2) to trigger a shared cooperative team bonus.
-- **Interactive Environment Builder:** Add obstacles, cliffs, mud, ice, portals, and two-click **Doors & Keys**, reposition agent start states (`Agent 1`, `Agent 2`), and move goals dynamically using direct grid click-and-place tools.
-- **Augmented MDP State Space & Multi-Policy Visualization:** When doors exist, state space augments to $(r, c, \text{has\_key})$, featuring a real-time slice selector between `Need Key` and `Has Key` policies, plus per-agent policy toggles for multi-agent games.
-- **Web Audio API Synthesizers:** Zero-latency sound synthesizers for steps, goal reached, collision bonks, Agent 1 win fanfare, Agent 2 win fanfare, and team victory chords.
-- **Mobile-Responsive UI:** Fluid layouts with touch-friendly controls, adaptive cell geometry down to 320px screens, and side-by-side agent representation within cells.
-- **Live Bidirectional Telemetry:** Stream training progress, instant rewards, 20-episode moving averages, and $\epsilon$-decay in real time over native WebSockets.
-- **Visual Overlays:** Toggle cardinal Q-values and optimal directional policy arrows ($\uparrow, \downarrow, \leftarrow, \rightarrow$) directly on each grid cell.
-- **Time-Travel Episode Replay:** Inspect historical episodes step-by-step with an interactive scrubber, detailed trajectory logs, and animated path playback.
-- **Greedy Policy Demonstration:** Watch the agent autonomously navigate the discovered optimal trajectory at human speed.
-- **One-Click Presets & Hyperparameter Tuning:** Adjust learning rate ($\alpha$), discount factor ($\gamma$), exploration rate ($\epsilon$), episode caps, and reward penalties on the fly.
-- **Single-Container Deployment:** Packaged with a multi-stage Docker build that bundles the built React client directly into the FastAPI server.
+### Core Capabilities of Project-002
+- **2D Physics Simulation & Kinematics**: Forward velocity, braking deceleration ($a = -5.0\text{ m/s}^2$), engine throttle ($a = +2.5\text{ m/s}^2$), and rolling resistance ($a = -0.3\text{ m/s}^2$).
+- **Visual Animations**:
+  - Headlight beams and **dynamic glowing red brake lights** that flare up whenever brakes are engaged.
+  - Nitrous boost particle trails on acceleration and tire friction smoke on braking.
+  - **Dynamic Forward LIDAR / Radar Cone**: Forward ray projecting to the barrier with color-coded safety zones (Green > 25m, Amber 10–25m, Crimson < 10m).
+  - Celebration confetti on safe stopping; explosion sparks on crash.
+- **3 Discrete Actions**: 0 = `Brake`, 1 = `Accelerate`, 2 = `Maintain`.
+- **Target Safe Zone**: Safe buffer zone between **$1.0\text{m}$ and $4.0\text{m}$** in front of the barrier ($+150.0$ reward).
+- **Interactive Control Modes**:
+  - **AI Autopilot**: Watch the trained policy execute optimal emergency braking.
+  - **Live Training**: Real-time training loop with $\epsilon$-greedy exploration decay.
+  - **Manual Driver Cockpit**: Test human reaction time against the AI using tactile buttons or keyboard shortcuts (`Space`/`B` to Brake, `Up`/`W` to Accelerate, `Down`/`M` to Coast).
+  - **Turbo Training**: Train 200 or 1,000 episodes instantly in < 0.25 seconds.
+- **Interactive Policy Heatmap**: $19 \times 10$ matrix of Distance ($X$) vs Velocity ($Y$) with cell hover inspection for $Q(\text{Brake})$, $Q(\text{Accelerate})$, $Q(\text{Maintain})$, and a glowing cursor tracking the car's state live.
 
 ---
 
-## Quickstart Guide
+## 🏁 Spotlight: Project-001 (RL GridWorld Playground)
+
+[**Project-001**](file:///Users/atharvasharna/Desktop/RL-proj/Project-001/readme.md) is a full-stack tabular Q-learning sandbox visualizing state-action updates across customizable grid topologies.
+
+- **Game Modes**: Solo Mode, Competitive Duel Mode (2-Agent Race with physical collision handling), and Cooperative Team Mode.
+- **Interactive Grid Builder**: Add walls, cliffs, mud, ice, portals, and two-click **Doors & Keys**.
+- **Augmented MDP State Space**: Demonstrates state augmentation $(r, c, \text{has\_key})$ with interactive policy slice toggles (`Need Key` vs. `Has Key`).
+- **Telemetry & Inspection**: Live cardinal Q-values, directional policy arrows, SVG reward convergence curves, and time-travel episode scrubber.
+
+---
+
+## ⚡ Quickstart Guide
 
 ### Prerequisites
-
-Ensure you have installed:
 - **Python**: version `3.12+`
 - **Node.js**: version `20+`
 - **Package Managers**: `pip` and `npm`
@@ -105,103 +125,107 @@ Ensure you have installed:
 
 ---
 
-### Method 1: Local Development Setup
+### Running Project-002 (Autonomous Car Braking)
 
-To run Project-001 locally in dual-server development mode:
-
-#### 1. Backend Server
+#### Option A: Unified Server (FastAPI + Bundled Frontend)
+FastAPI serves the backend APIs, WebSockets, and the compiled React SPA simultaneously:
 ```bash
-# Navigate to Project-001 backend
-cd Project-001/backend
-
-# Create and activate a Python virtual environment
-python3 -m venv venv
-source venv/bin/activate       # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the FastAPI server with live reloading
-uvicorn main:app --reload --port 8000
-```
-- **REST API:** `http://localhost:8000`
-- **Swagger Documentation:** `http://localhost:8000/api/docs`
-- **Health Check:** `http://localhost:8000/api/health`
-
-#### 2. Frontend Client
-```bash
-# Open a new terminal tab/window
-cd Project-001/frontend
-
-# Install dependencies
+# 1. Build React frontend
+cd Project-002/frontend
 npm install
+npm run build
+rm -rf ../backend/static && cp -r dist ../backend/static
 
-# Start Vite development server
+# 2. Run backend
+cd ../backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+Open **`http://localhost:8000`** in your browser.
+
+#### Option B: Dual Dev Servers with Hot-Reload
+- **Backend**:
+  ```bash
+  cd Project-002/backend
+  source venv/bin/activate
+  uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  ```
+- **Frontend**:
+  ```bash
+  cd Project-002/frontend
+  npm run dev
+  ```
+Open **`http://localhost:5174`**.
+
+---
+
+### Running Project-001 (GridWorld Playground)
+
+```bash
+# 1. Backend Server
+cd Project-001/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# 2. Frontend Client (separate terminal)
+cd Project-001/frontend
+npm install
 npm run dev
 ```
-- **Application UI:** `http://localhost:5173`
+Open **`http://localhost:5173`**.
 
 ---
 
-### Method 2: Docker Containerized Execution
+## 🐳 Docker & 1-Click Deployment on Render
 
-A production-grade, multi-stage `Dockerfile` is provided in `Project-001/`. It builds the React client into static assets and serves both the frontend SPA and FastAPI backend from a single unified container:
+Both `Project-001` and `Project-002` feature self-contained, multi-stage production Dockerfiles:
+- **Stage 1 (node:20-alpine)**: Installs npm dependencies and compiles optimized static assets.
+- **Stage 2 (python:3.12-slim)**: Installs Python dependencies, copies backend code and static assets, runs as a secure non-root user, and binds `uvicorn` to `$PORT`.
 
+### Local Docker Testing
 ```bash
-# Navigate to Project-001
-cd Project-001
-
-# Build the Docker image
-docker build -t rl-playground .
-
-# Run the container
-docker run -p 8000:8000 rl-playground
+# For Project-002:
+cd Project-002
+docker build -t autostop-rl .
+docker run -p 8000:8000 -e PORT=8000 autostop-rl
 ```
 
-Open your browser at `http://localhost:8000` to interact with the full playground.
+### 1-Click Render Deployment
+1. Connect your GitHub repository to [Render](https://dashboard.render.com/).
+2. Click **New → Web Service**.
+3. Choose the project folder as **Root Directory** (`Project-002` or `Project-001`).
+4. Set **Environment** to `Docker` and **Dockerfile Path** to `Dockerfile`.
+5. Click **Deploy Web Service**! Render will automatically build the container and deploy the app.
 
 ---
 
-## Engineering & Architectural Principles
-
-1. **Decoupled RL Core:** The reinforcement learning mathematics (environments, agents, state update rules) are implemented as pure, dependency-light Python modules separated from server and transport logic.
-2. **Non-Blocking Asynchronous Concurrency:** Training loops run inside dedicated `asyncio.Task` workers. Training execution can be paused, resumed, throttled, or reset using non-blocking synchronization primitives (`asyncio.Event`) without stalling the server's event loop.
-3. **Observability First:** Rather than outputting offline terminal logs, training states are streamed as fine-grained JSON events across WebSockets, allowing instant visualization of convergence dynamics.
-4. **Resilient Production Packaging:** The multi-stage build creates a zero-node, lightweight Python runtime image executed by a dedicated non-root user, ready for single-click deployment to platforms such as Render, Fly.io, or AWS ECS.
-
----
-
-## Repository Roadmap
+## 🛣️ Repository Roadmap
 
 - [x] **Project-001: Tabular Q-Learning GridWorld Visualizer**
-  - [x] Real-time WebSocket streaming
-  - [x] Custom grid builder & obstacle editor
-  - [x] Policy arrows & Q-value overlays
-  - [x] Episode history inspector & scrubber replay
+  - [x] Multi-agent competitive and cooperative modes
+  - [x] Augmented state space with Door & Key mechanics
+  - [x] Time-travel episode scrubber and historical replay
   - [x] Multi-stage Docker packaging
-- [ ] **Project-002: Deep Q-Networks (DQN) for Classic Control**
+- [x] **Project-002: AutoStop RL — Autonomous 2D Car Braking Playground**
+  - [x] 2D Kinematics physics with braking, throttle, and drag
+  - [x] Continuous state discretization ($19 \times 10$ bins)
+  - [x] Dynamic visual effects (headlights, tail brake lights, nitrous particles, LIDAR ray)
+  - [x] Interactive policy heatmap with live car state tracker
+  - [x] Playable manual driving cockpit with keyboard shortcuts
+  - [x] Multi-stage Docker packaging for 1-click Render deployment
+- [ ] **Project-003: Deep Q-Networks (DQN) for Classic Control**
   - [ ] CartPole-v1 & LunarLander environments
   - [ ] Target network stabilization and replay buffer visualizer
-- [ ] **Project-003: Policy Gradient Methods**
-  - [ ] REINFORCE with baseline
-  - [ ] Actor-Critic (A2C) on continuous state spaces
-- [ ] **Project-004: Proximal Policy Optimization (PPO)**
+- [ ] **Project-004: Policy Gradient Methods (REINFORCE / PPO)**
+  - [ ] Continuous action spaces and torque control
   - [ ] Clipped surrogate objective visualizer
-  - [ ] 3D continuous robotics benchmark
 
 ---
 
-## Contributing
-
-Contributions, bug reports, and new project proposals are welcome!
-1. Fork this repository.
-2. Create your feature branch (`git checkout -b feature/new-rl-environment`).
-3. Commit your changes (`git commit -m 'feat: add custom MDP environment'`).
-4. Push to the branch (`git push origin feature/new-rl-environment`).
-5. Open a Pull Request.
-
----
-
-## License
+## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
